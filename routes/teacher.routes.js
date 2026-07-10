@@ -5,6 +5,8 @@ import {
   getAllTeachers,
   getTeacherById,
   updateTeacherStatus,
+  updateTeacher,
+   deleteTeacher,
 } from "../controllers/teacher.controller.js";
 
 import {
@@ -50,6 +52,13 @@ router.get(
  authorize("principal"),
   getTeacherById
 );
+  router.patch(
+    "/:id",
+    authenticate,
+    authorize("principal"),
+    updateTeacher 
+  )
+
 
 
 
@@ -60,6 +69,14 @@ router.patch(
   updateTeacherStatus
 );
 
+
+router.delete(
+  "/:id",
+  authenticate,
+  authorize("principal"),
+  deleteTeacher
+);
+ 
 
 
 export default router;

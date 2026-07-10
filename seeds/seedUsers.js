@@ -11,8 +11,10 @@ dotenv.config();
 
 const run = async () => {
   try {
-    await mongoose.connect(process.env.MONGO_URI);
-
+await mongoose.connect(process.env.MONGO_URI, {
+  dbName: "slms_db",
+});
+   console.log("Database:", mongoose.connection.name);
     console.log("DB connected for seeding");
 
     // Clear existing data

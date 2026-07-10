@@ -59,3 +59,43 @@ export const updateTeacherStatusService = async (
 
     return teacher;
 }
+
+export const updateTeacherService = async (
+  teacherId,
+  teacherData
+) => {
+  const teacher = await User.findOneAndUpdate(
+    {
+      _id: teacherId,
+      role: "teacher",
+    },
+    {
+      $set: teacherData,
+    },
+    {
+      new: true,
+      runValidators: true,
+    }
+  ).select("-password");
+
+  if (!teacher) {
+    throw new Error("Teacher not found");
+  }
+
+  return teacher;
+};
+
+export const deleteTeacherService = async (
+  teacherId
+) => {
+  const teacher = await User.findOneAndDelete({
+    _id: teacherId,
+    role: "teacher",
+  });
+
+  if (!teacher) {
+    throw new Error("Teacher not found");
+  }
+
+  return teacher;
+};
