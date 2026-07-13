@@ -8,7 +8,9 @@ import {
   deleteStudentController,
   getStudentsByDivisionController,
 } from "../controllers/student.controller.js";
-
+import {
+  validateCreateStudent,
+} from "../middleware/validateStudent.middleware.js";
 import {
   authenticate,
 } from "../middleware/auth.middleware.js";
@@ -25,14 +27,11 @@ const router = express.Router();
 
 router.post(
   "/",
-
   authenticate,
-
   authorize("principal"),
-
+  validateCreateStudent,
   createStudentController
 );
-
 /* =========================================
    GET ALL STUDENTS
 ========================================= */

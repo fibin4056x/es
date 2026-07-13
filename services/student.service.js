@@ -24,15 +24,13 @@ const normalizeStudentPayload =
       ...studentData,
     };
 
-    if (
-      isBlankValue(
-        payload.examRegisterNumber
-      )
-    ) {
-      delete payload.examRegisterNumber;
-    }
-
-    return payload;
+   if (
+  isBlankValue(
+    payload.admissionNumber
+  )
+) {
+  delete payload.admissionNumber;
+}
   };
 
 

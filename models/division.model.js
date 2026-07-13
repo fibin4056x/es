@@ -80,7 +80,15 @@ const divisionSchema =
       timestamps: true,
     }
   );
-
+divisionSchema.index(
+  {
+    classId: 1,
+    name: 1,
+  },
+  {
+    unique: true,
+  }
+);
 
 
 const DivisionModel =
