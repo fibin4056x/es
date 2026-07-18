@@ -5,6 +5,7 @@ import {
   updateStudentService,
   deleteStudentService,
   getStudentsByDivisionService,
+  getStudentsByTeacherService
 } from "../services/student.service.js";
 
 
@@ -112,7 +113,8 @@ export const updateStudentController =
       const updatedStudent =
         await updateStudentService(
           req.params.id,
-          req.body
+          req.body,
+          req.user
         );
 
       res.status(200).json({
@@ -131,7 +133,9 @@ export const updateStudentController =
 
         message: error.message,
       });
+
     }
+
   };
 
 
@@ -161,6 +165,19 @@ export const deleteStudentController =
       });
     }
   };
+  export const getStudentsByTeacherController = async (req, res) => {
+    try {
+      const students = await getStudentsByTeacherService(req.user.id);
+
+      res.status(200).json({
+        success: true,
+        data: students,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message, 
+      })}}
 
   /* =========================================
    GET STUDENTS BY DIVISION
@@ -193,4 +210,4 @@ export const getStudentsByDivisionController =
         message: error.message,
       });
     }
-  };
+  }

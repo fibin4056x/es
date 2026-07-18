@@ -7,6 +7,7 @@ import {
   updateStudentController,
   deleteStudentController,
   getStudentsByDivisionController,
+  getStudentsByTeacherController,
 } from "../controllers/student.controller.js";
 import {
   validateCreateStudent,
@@ -55,7 +56,7 @@ router.get(
 
   authenticate,
 
-  authorize("teacher"),
+  authorize("teacher", "principal"),
 
   getStudentsByDivisionController
 );
@@ -69,7 +70,7 @@ router.get(
 
   authenticate,
 
-  authorize("principal"),
+  authorize("principal", "teacher"),
 
   getStudentByIdController
 );
@@ -83,11 +84,18 @@ router.patch(
 
   authenticate,
 
-  authorize("principal"),
+  authorize("principal", "teacher"),
 
   updateStudentController
 );
 
+
+router.get(
+  "/teacher/students",
+  authenticate,
+  authorize("teacher"),
+  getStudentsByTeacherController
+);
 /* =========================================
    DELETE STUDENT
 ========================================= */

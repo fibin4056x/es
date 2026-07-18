@@ -21,7 +21,6 @@ app.use(
   cors({
     origin: (origin, callback) => {
 
-      // Allow Postman, mobile apps, curl
       if (!origin) {
         return callback(null, true);
       }

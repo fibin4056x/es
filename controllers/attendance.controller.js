@@ -1,155 +1,73 @@
-import Attendance from "../models/attendence.model.js";
-
+import {
+  markAttendanceService,
+  getAttendanceByDateService,
+  getDivisionAttendanceService,
+} from "../services/attendence.service.js";
+import asyncHandler from "../utils/asyncHandler.js";
+import ApiResponse from "../utils/apiResponse.js";
 /* =========================================
    MARK ATTENDANCE
 ========================================= */
 
-export const markAttendance =
-  async (req, res) => {
+export const markAttendanceController =
+  asyncHandler (async (req, res) => {
+      const attendance =
+        await markAttendanceService(
+          req.body,
+          req.user.id
+        );
 
-    try {
+      res.status(201).json(
+       new ApiResponse(
+        201,
+        attendance,
+        "Attendance marked successfully"
+       ))
 
-      const {
-        studentId,
-        divisionId,
-        status,
-        remarks,
-        date,
-      } = req.body;
+    });
 
-      /* =====================================
-         CHECK EXISTING ATTENDANCE
-      ===================================== */
+/* =========================================
+   GET ATTENDANCE BY DATE
+========================================= */
 
-      const existingAttendance =
-        await Attendance.findOne({
-
-          studentId,
-
-          divisionId,
-
-          date,
-        });
-
-      /* =====================================
-         UPDATE EXISTING
-      ===================================== */
-
-      if (
-        existingAttendance
-      ) {
-
-        existingAttendance.status =
-          status;
-
-        existingAttendance.remarks =
-          remarks || "";
-
-        await existingAttendance.save();
-
-        return res.status(200).json({
-
-          success: true,
-
-          message:
-            "Attendance updated successfully",
-
-          data:
-            existingAttendance,
-        });
-      }
-
-      /* =====================================
-         CREATE NEW ATTENDANCE
-      ===================================== */
+export const getAttendanceByDateController =
+  asyncHandler(async (req, res) => {
 
       const attendance =
-        await Attendance.create({
+        await getAttendanceByDateService(
+          req.params.divisionId,
+          req.query.date
+        );
 
-          studentId,
-
-          divisionId,
-
-          status,
-
-          remarks: remarks || "",
-
-          date,
-        });
-
-      res.status(201).json({
-
-        success: true,
-
-        message:
-          "Attendance marked successfully",
-
-        data:
+      res.status(200).json(
+        new ApiResponse(
+          200,
           attendance,
-      });
+          "attendance fetched successfully"
+        ))
+      
 
-    } catch (error) {
-
-      console.log(
-        "ATTENDANCE ERROR:",
-        error
-      );
-
-      res.status(500).json({
-
-        success: false,
-
-        message:
-          "Failed to mark attendance",
-      });
-    }
-  };
+    });
 
 /* =========================================
    GET DIVISION ATTENDANCE
 ========================================= */
 
-export const getDivisionAttendance =
-  async (req, res) => {
+export const getDivisionAttendanceController =
+  asyncHandler(async (req, res) => {
 
-    try {
-
-      const {
-        divisionId,
-      } = req.params;
 
       const attendance =
-        await Attendance.find({
+        await getDivisionAttendanceService(
+          req.params.divisionId
+        );
 
-          divisionId,
-        })
-
-          .populate(
-            "studentId"
-          )
-
-          .sort({
-            createdAt: -1,
-          });
-
-      res.status(200).json({
-
-        success: true,
-
-        data:
+      res.status(200).json(
+        new ApiResponse(
+          200,
           attendance,
-      });
+          "Division attendance fetched successfully"
+        )
+      );
+    });
 
-    } catch (error) {
-
-      console.log(error);
-
-      res.status(500).json({
-
-        success: false,
-
-        message:
-          "Failed to fetch attendance",
-      });
-    }
-  };

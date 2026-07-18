@@ -1,20 +1,77 @@
 import express from "express";
 
 import {
-  markAttendance,
-  getDivisionAttendance,
+  markAttendanceController,
+  getAttendanceByDateController,
+  getDivisionAttendanceController,
 } from "../controllers/attendance.controller.js";
 
-const router = express.Router();
+import {
+  authenticate,
+} from "../middleware/auth.middleware.js";
+
+import {
+  authorize,
+} from "../middleware/role.middleware.js";
+
+import {
+  validateAttendance,
+} from "../middleware/validateAttendance.middleware.js";
+
+const router =
+  express.Router();
+
+/* =========================================
+   MARK ATTENDANCE
+========================================= */
 
 router.post(
-  "/mark",
-  markAttendance
+  "/",
+
+  authenticate,
+
+  authorize(
+    "principal",
+    "teacher"
+  ),
+
+  validateAttendance,
+
+  markAttendanceController
 );
+
+/* =========================================
+   GET ATTENDANCE BY DATE
+========================================= */
 
 router.get(
   "/division/:divisionId",
-  getDivisionAttendance
+
+  authenticate,
+
+  authorize(
+    "principal",
+    "teacher"
+  ),
+
+  getAttendanceByDateController
+);
+
+/* =========================================
+   GET DIVISION HISTORY
+========================================= */
+
+router.get(
+  "/history/:divisionId",
+
+  authenticate,
+
+  authorize(
+
+    "teacher"
+  ),
+
+  getDivisionAttendanceController
 );
 
 export default router;
