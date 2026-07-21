@@ -12,6 +12,7 @@ export const dashboardStatsService = async () => {
     teachers,
     classes,
     todayAttendance,
+    recentTeachers,
   ] = await Promise.all([
     Student.countDocuments({
       status: "active",
@@ -29,6 +30,14 @@ export const dashboardStatsService = async () => {
     AttendanceModel.countDocuments({
       date: today,
     }),
+
+    User.find({
+      role: "teacher",
+      status: "active",
+    })
+      .select("name email")
+      .sort({ createdAt: -1 })
+      .limit(5),
   ]);
 
   return {
@@ -36,5 +45,6 @@ export const dashboardStatsService = async () => {
     teachers,
     classes,
     attendance: todayAttendance,
+    recentTeachers,
   };
 };
