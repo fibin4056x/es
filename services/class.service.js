@@ -1,4 +1,5 @@
 import ClassModel from "../models/class.model.js";
+import DivisionModel from "../models/division.model.js";
 
 const normalizeClassPayload = (
   classData = {}
@@ -94,16 +95,32 @@ export const updateClassService =
 
 export const deleteClassService =
   async (classId) => {
-    const deletedClass =
-      await ClassModel.findByIdAndDelete(
-        classId
-      );
+   //check if class exists 
 
-    if (!deletedClass) {
-      throw new Error("Class not found");
-    }
+   const classData = await  ClassModel.findById(classId);
 
-    return deletedClass;
+   if(!classData){
+    throw new Error("Class not found");
+   }
+
+   //check if any division  belongs to  this  class 
+
+   const hasDivision =await DivisionModel.exists({
+    classId,
+   })
+
+   if(hasDivision){
+    throw  Error(
+      "Cannot delete  class because  division are assigned to it "
+    );
+  }
+  //safe to delete 
+  await ClassModel.findByIdAndDelete(classId);
+
+   return {
+
+    message:"Class deleted successfully",
+   };
   };
 
   

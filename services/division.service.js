@@ -1,6 +1,6 @@
 import DivisionModel
   from "../models/division.model.js";
-
+import StudentModel from "../models/student.model.js";
 
 
 /* =========================================
@@ -150,25 +150,31 @@ export const updateDivisionService =
 
 export const deleteDivisionService =
   async (divisionId) => {
+   const division = await DivisionModel.findById(divisionId);
 
-    const deletedDivision =
+   if(!divisionId){
+    throw new Error("Division  not found ")
+   }
+
+   //check  whether student  are assigned to it.
+
+   const hasStudents = await StudentModel.exists({
+    divisionId,})
+   
+
+   if(hasStudents){
+    throw new Error(
+      "cannot delete  divisionId because students are assigned to it."
     
-    await DivisionModel.findByIdAndDelete(
-        divisionId
-      );
+    )
 
+   }
 
+   await DivisionModel.findByIdAndDelete(divisionId);
 
-    if (!deletedDivision) {
-
-      throw new Error(
-        "Division not found"
-      );
-    }
-
-
-
-    return deletedDivision;
+   return {
+    message :" Division deleted successfully"
+   }
   };
   /* =========================================
    GET DIVISIONS BY TEACHER

@@ -30,6 +30,10 @@ const attendancePopulate = [
    MARK ATTENDANCE
 ========================================= */
 
+/* =========================================
+   MARK ATTENDANCE
+========================================= */
+
 export const markAttendanceService = async (
   attendanceData,
   userId
@@ -41,41 +45,37 @@ export const markAttendanceService = async (
     students,
   } = attendanceData;
 
+  /* =========================================
+     STUDENT IDS
+  ========================================= */
 
+  const studentIds = students.map(
+    (student) => student.studentId
+  );
 
+  /* =========================================
+     VALIDATE DIVISION & STUDENTS
+  ========================================= */
 
-/* =========================================
-   STUDENT IDS
-========================================= */
+  const [division, validStudents] =
+    await Promise.all([
+      DivisionModel.findById(
+        divisionId
+      ).lean(),
 
-const studentIds = students.map(
-  (student) => student.studentId
-);
+      StudentModel.find({
+        _id: {
+          $in: studentIds,
+        },
+        divisionId,
+        status: "active",
+      }).lean(),
+    ]);
 
-/* =========================================
-   VALIDATE DIVISION & STUDENTS
-========================================= */
-
-const [division, validStudents] =
-  await Promise.all([
-    DivisionModel.findById(
-      divisionId
-    ).lean(),
-
-    StudentModel.find({
-      _id: {
-        $in: studentIds,
-      },
-      divisionId,
-      status: "active",
-    }).lean(),
-  ]);
- 
   /* =========================================
      VALIDATE DIVISION
   ========================================= */
 
- 
   if (!division) {
     throw new ApiError(
       404,
@@ -96,7 +96,6 @@ const [division, validStudents] =
   /* =========================================
      VALIDATE STUDENTS
   ========================================= */
-
 
   if (
     validStudents.length !==
@@ -146,9 +145,12 @@ const [division, validStudents] =
      NORMALIZE DATE
   ========================================= */
 
-  const attendanceDate = new Date(date);
+  const attendanceDate =
+    new Date(date);
 
-  if (isNaN(attendanceDate.getTime())) {
+  if (
+    isNaN(attendanceDate.getTime())
+  ) {
     throw new ApiError(
       400,
       "Invalid attendance date."
@@ -161,6 +163,34 @@ const [division, validStudents] =
     0,
     0
   );
+
+  /* =========================================
+     ATTENDANCE SUMMARY
+  ========================================= */
+
+  const totalStudents =
+    students.length;
+
+  const presentCount =
+    students.filter(
+      (student) =>
+        student.status ===
+        "present"
+    ).length;
+
+  const absentCount =
+    students.filter(
+      (student) =>
+        student.status ===
+        "absent"
+    ).length;
+
+  const lateCount =
+    students.filter(
+      (student) =>
+        student.status ===
+        "late"
+    ).length;
 
   /* =========================================
      CREATE OR UPDATE
@@ -176,8 +206,14 @@ const [division, validStudents] =
         classId,
         divisionId,
         markedBy: userId,
-        students,
         date: attendanceDate,
+
+        totalStudents,
+        presentCount,
+        absentCount,
+        lateCount,
+
+        students,
       },
       {
         upsert: true,

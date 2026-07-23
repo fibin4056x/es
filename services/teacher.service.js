@@ -1,5 +1,5 @@
 import User from "../models/user.model.js";
-
+import DivisionModel from "../models/division.model.js";
 
 
 export const createTeacherService = async (teacherData) => {
@@ -88,14 +88,36 @@ export const updateTeacherService = async (
 export const deleteTeacherService = async (
   teacherId
 ) => {
-  const teacher = await User.findOneAndDelete({
-    _id: teacherId,
+  //check if teacher exists 
+
+  const teacher = await User.findOne({
+    _id:teacherId,
     role: "teacher",
   });
 
-  if (!teacher) {
-    throw new Error("Teacher not found");
+  if(!teacher){
+    throw new  Error(" Teacher  not found")
   }
 
-  return teacher;
+  //Check if teacher is assigned to any division
+
+  const assignedDivision =await DivisionModel.exists({
+    assignedTeacher: teacherId,
+
+  })
+  if(assignedDivision){
+    throw new ErrorEvent(
+      "Cannot delete teacher because the teacher is assigned to a division."
+    );
+  }
+
+  // Safe to delete
+   await User.findByIdAndDelete({
+    _id:teacherId,
+    role:"teacher",
+   });
+
+   return {
+    message : "Teacher delete successfully"
+   };
 };
