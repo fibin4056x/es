@@ -21,14 +21,10 @@ const attendancePopulate = [
     select: "name",
   },
   {
-    path: "students.studentId",
+    path: "studentId",
     select: "admissionNumber nameEnglish",
   },
 ];
-
-/* =========================================
-   MARK ATTENDANCE
-========================================= */
 
 /* =========================================
    MARK ATTENDANCE
@@ -44,6 +40,21 @@ export const markAttendanceService = async (
     divisionId,
     students,
   } = attendanceData;
+
+  /* =========================================
+     NORMALIZE DATE
+  ========================================= */
+
+  const attendanceDate = new Date(date);
+
+  if (isNaN(attendanceDate.getTime())) {
+    throw new ApiError(
+      400,
+      "Invalid attendance date."
+    );
+  }
+
+  attendanceDate.setHours(0, 0, 0, 0);
 
   /* =========================================
      STUDENT IDS
@@ -119,7 +130,7 @@ export const markAttendanceService = async (
   ) {
     throw new ApiError(
       400,
-      "Duplicate students found in attendance"
+      "Duplicate students found."
     );
   }
 
@@ -129,102 +140,57 @@ export const markAttendanceService = async (
 
   for (const student of students) {
     if (
-      ["absent", "late"].includes(
+      ["absent", "late", "leave"].includes(
         student.status
       ) &&
       !student.reason?.trim()
     ) {
       throw new ApiError(
         400,
-        "Reason is required for absent or late students."
+        `Reason is required for ${student.status}.`
       );
     }
   }
 
   /* =========================================
-     NORMALIZE DATE
+     SAVE ATTENDANCE
   ========================================= */
 
-  const attendanceDate =
-    new Date(date);
-
-  if (
-    isNaN(attendanceDate.getTime())
-  ) {
-    throw new ApiError(
-      400,
-      "Invalid attendance date."
-    );
-  }
-
-  attendanceDate.setHours(
-    0,
-    0,
-    0,
-    0
-  );
-
-  /* =========================================
-     ATTENDANCE SUMMARY
-  ========================================= */
-
-  const totalStudents =
-    students.length;
-
-  const presentCount =
-    students.filter(
-      (student) =>
-        student.status ===
-        "present"
-    ).length;
-
-  const absentCount =
-    students.filter(
-      (student) =>
-        student.status ===
-        "absent"
-    ).length;
-
-  const lateCount =
-    students.filter(
-      (student) =>
-        student.status ===
-        "late"
-    ).length;
-
-  /* =========================================
-     CREATE OR UPDATE
-  ========================================= */
-
-  const attendance =
-    await AttendanceModel.findOneAndUpdate(
-      {
-        divisionId,
-        date: attendanceDate,
-      },
-      {
-        classId,
-        divisionId,
-        markedBy: userId,
-        date: attendanceDate,
-
-        totalStudents,
-        presentCount,
-        absentCount,
-        lateCount,
-
-        students,
-      },
-      {
+  const operations = students.map(
+    (student) => ({
+      updateOne: {
+        filter: {
+          studentId: student.studentId,
+          date: attendanceDate,
+        },
+        update: {
+          $set: {
+            date: attendanceDate,
+            classId,
+            divisionId,
+            studentId: student.studentId,
+            status: student.status,
+            reason:
+              student.reason || "",
+            file: student.file || "",
+            markedBy: userId,
+          },
+        },
         upsert: true,
-        new: true,
-        runValidators: true,
-      }
-    );
-
-  return attendance.populate(
-    attendancePopulate
+      },
+    })
   );
+
+  await AttendanceModel.bulkWrite(
+    operations
+  );
+
+  return AttendanceModel.find({
+    divisionId,
+    date: attendanceDate,
+  })
+    .populate(attendancePopulate)
+    .lean();
 };
 
 /* =========================================
@@ -239,7 +205,9 @@ export const getAttendanceByDateService =
     const attendanceDate =
       new Date(date);
 
-    if (isNaN(attendanceDate.getTime())) {
+    if (
+      isNaN(attendanceDate.getTime())
+    ) {
       throw new ApiError(
         400,
         "Invalid attendance date."
@@ -253,10 +221,14 @@ export const getAttendanceByDateService =
       0
     );
 
-    return AttendanceModel.findOne({
+    return AttendanceModel.find({
       divisionId,
       date: attendanceDate,
-    }).populate(attendancePopulate).lean();
+    })
+      .populate(
+        attendancePopulate
+      )
+      .lean();
   };
 
 /* =========================================
@@ -270,7 +242,9 @@ export const getDivisionAttendanceService =
     return AttendanceModel.find({
       divisionId,
     })
-      .populate(attendancePopulate)
+      .populate(
+        attendancePopulate
+      )
       .sort({
         date: -1,
       })

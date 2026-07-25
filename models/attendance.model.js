@@ -1,7 +1,24 @@
 import mongoose from "mongoose";
 
-const attendanceStudentSchema = new mongoose.Schema(
+const attendanceSchema = new mongoose.Schema(
   {
+    date: {
+      type: Date,
+      required: true,
+    },
+
+    classId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Class",
+      required: true,
+    },
+
+    divisionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Division",
+      required: true,
+    },
+
     studentId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Student",
@@ -10,96 +27,26 @@ const attendanceStudentSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["present", "absent", "late"],
-      default: "absent",
+      enum: ["present", "absent", "late", "leave"],
+      required: true,
     },
 
     reason: {
       type: String,
+      default: "",
       trim: true,
+    },
+
+    file: {
+      type: String,
       default: "",
     },
-  },
-  {
-    _id: false,
-  }
-);
-
-const attendanceSchema = new mongoose.Schema(
-  {
-    /* =============================
-       DATE
-    ============================= */
-
-    date: {
-      type: Date,
-      required: true,
-    },
-
-    /* =============================
-       CLASS
-    ============================= */
-
-    classId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Class",
-      required: true,
-    },
-
-    /* =============================
-       DIVISION
-    ============================= */
-
-    divisionId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Division",
-      required: true,
-    },
-
-    /* =============================
-       MARKED BY
-    ============================= */
 
     markedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
-
-    /* =============================
-       ATTENDANCE SUMMARY
-    ============================= */
-
-    totalStudents: {
-      type: Number,
-      required: true,
-      default: 0,
-      min: 0,
-    },
-
-    presentCount: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-
-    absentCount: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-
-    lateCount: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-
-    /* =============================
-       STUDENTS
-    ============================= */
-
-    students: [attendanceStudentSchema],
   },
   {
     timestamps: true,
@@ -107,13 +54,9 @@ const attendanceSchema = new mongoose.Schema(
   }
 );
 
-/* =====================================
-   ONE ATTENDANCE PER DIVISION PER DAY
-===================================== */
-
 attendanceSchema.index(
   {
-    divisionId: 1,
+    studentId: 1,
     date: 1,
   },
   {
@@ -121,9 +64,4 @@ attendanceSchema.index(
   }
 );
 
-const AttendanceModel = mongoose.model(
-  "Attendance",
-  attendanceSchema
-);
-
-export default AttendanceModel;
+export default mongoose.model("Attendance", attendanceSchema);

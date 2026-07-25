@@ -1,6 +1,6 @@
 import User from "../models/user.model.js";
 import DivisionModel from "../models/division.model.js";
-
+import bcrypt from "bcryptjs";
 
 export const createTeacherService = async (teacherData) => {
     const existingTeacher = await User.findOne({ email: teacherData.email, });
@@ -60,10 +60,11 @@ export const updateTeacherStatusService = async (
     return teacher;
 }
 
-export const updateTeacherService = async (
-  teacherId,
-  teacherData
-) => {
+export const updateTeacherService = async (teacherId, teacherData) => {
+  if (teacherData.password) {
+    teacherData.password = await bcrypt.hash(teacherData.password, 10);
+  }
+
   const teacher = await User.findOneAndUpdate(
     {
       _id: teacherId,
@@ -73,7 +74,7 @@ export const updateTeacherService = async (
       $set: teacherData,
     },
     {
-      new: true,
+      returnDocument: "after",
       runValidators: true,
     }
   ).select("-password");

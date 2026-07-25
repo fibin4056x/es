@@ -42,7 +42,7 @@ router.get(
 
   authenticate,
 
-  authorize("principal"),
+  authorize("principal" ,"teacher"),
 
   getAllStudentsController
 );

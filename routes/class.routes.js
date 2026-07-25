@@ -35,7 +35,7 @@ router.post(
 router.get(
   "/",
   authenticate,
-  authorize("principal"),
+  authorize("principal","teacher"),
   getAllClasses
 );
 

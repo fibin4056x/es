@@ -5,26 +5,27 @@ import {
 } from "../services/attendence.service.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import ApiResponse from "../utils/apiResponse.js";
+
 /* =========================================
    MARK ATTENDANCE
 ========================================= */
 
-export const markAttendanceController =
-  asyncHandler (async (req, res) => {
-      const attendance =
-        await markAttendanceService(
-          req.body,
-          req.user.id
-        );
+export const markAttendanceController = asyncHandler(
+  async (req, res) => {
+    const attendance = await markAttendanceService(
+      req.body,
+      req.user.id
+    );
 
-      res.status(201).json(
-       new ApiResponse(
+    return res.status(201).json(
+      new ApiResponse(
         201,
         attendance,
         "Attendance marked successfully"
-       ))
-
-    });
+      )
+    );
+  }
+);
 
 /* =========================================
    GET ATTENDANCE BY DATE
@@ -32,22 +33,23 @@ export const markAttendanceController =
 
 export const getAttendanceByDateController =
   asyncHandler(async (req, res) => {
+    const { divisionId } = req.params;
+    const { date } = req.query;
 
-      const attendance =
-        await getAttendanceByDateService(
-          req.params.divisionId,
-          req.query.date
-        );
+    const attendance =
+      await getAttendanceByDateService(
+        divisionId,
+        date
+      );
 
-      res.status(200).json(
-        new ApiResponse(
-          200,
-          attendance,
-          "attendance fetched successfully"
-        ))
-      
-
-    });
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        attendance,
+        "Attendance fetched successfully"
+      )
+    );
+  });
 
 /* =========================================
    GET DIVISION ATTENDANCE
@@ -55,19 +57,18 @@ export const getAttendanceByDateController =
 
 export const getDivisionAttendanceController =
   asyncHandler(async (req, res) => {
+    const { divisionId } = req.params;
 
-
-      const attendance =
-        await getDivisionAttendanceService(
-          req.params.divisionId
-        );
-
-      res.status(200).json(
-        new ApiResponse(
-          200,
-          attendance,
-          "Division attendance fetched successfully"
-        )
+    const attendance =
+      await getDivisionAttendanceService(
+        divisionId
       );
-    });
 
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        attendance,
+        "Division attendance fetched successfully"
+      )
+    );
+  });

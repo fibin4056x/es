@@ -103,6 +103,8 @@ userSchema.index({ setupToken: 1 });
 
 // ================= PASSWORD HASH =================
 userSchema.pre("save", async function () {
+    console.log("🔥 PRE SAVE HOOK RUNNING");
+  console.log("Password before hash:", this.password);
   if (!this.isModified("password") || !this.password) {
     return;
   }

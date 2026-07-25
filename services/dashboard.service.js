@@ -8,7 +8,6 @@ import AttendanceModel from "../models/attendance.model.js";
 ========================================= */
 
 const getWeeklyAttendanceChart = async () => {
-
   const endDate = new Date();
   endDate.setHours(23, 59, 59, 999);
 
@@ -34,48 +33,50 @@ const getWeeklyAttendanceChart = async () => {
           $sum: "$totalStudents",
         },
 
-        presentStudents: {
-          $sum: "$presentCount",
+        attendedStudents: {
+          $sum: {
+            $add: ["$presentCount", "$lateCount"],
+          },
         },
       },
     },
 
-   {
-  $project: {
-    _id: 0,
+    {
+      $project: {
+        _id: 0,
 
-    day: "$_id",
+        day: "$_id",
 
-    rate: {
-      $round: [
-        {
-          $cond: [
+        rate: {
+          $round: [
             {
-              $eq: ["$totalStudents", 0],
-            },
-            0,
-            {
-              $multiply: [
+              $cond: [
                 {
-                  $divide: [
-                    "$presentStudents",
-                    "$totalStudents",
+                  $eq: ["$totalStudents", 0],
+                },
+                0,
+                {
+                  $multiply: [
+                    {
+                      $divide: [
+                        "$attendedStudents",
+                        "$totalStudents",
+                      ],
+                    },
+                    100,
                   ],
                 },
-                100,
               ],
             },
+            1,
           ],
         },
-        1,
-      ],
+      },
     },
-  },
-},
 
     {
       $sort: {
-        date: 1,
+        day: 1,
       },
     },
   ]);
@@ -87,7 +88,6 @@ const getWeeklyAttendanceChart = async () => {
 ========================================= */
 
 const getMonthlyAttendanceChart = async () => {
-
   const now = new Date();
 
   const startDate = new Date(
@@ -133,8 +133,10 @@ const getMonthlyAttendanceChart = async () => {
           $sum: "$totalStudents",
         },
 
-        presentStudents: {
-          $sum: "$presentCount",
+        attendedStudents: {
+          $sum: {
+            $add: ["$presentCount", "$lateCount"],
+          },
         },
       },
     },
@@ -167,7 +169,7 @@ const getMonthlyAttendanceChart = async () => {
                   $multiply: [
                     {
                       $divide: [
-                        "$presentStudents",
+                        "$attendedStudents",
                         "$totalStudents",
                       ],
                     },
@@ -198,7 +200,7 @@ const getMonthlyAttendanceChart = async () => {
   ]);
 
   return monthlyChart;
-};
+};;
 
 /* =========================================
    DASHBOARD STATS
