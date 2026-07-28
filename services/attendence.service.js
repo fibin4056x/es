@@ -78,7 +78,7 @@ export const markAttendanceService = async (
         _id: {
           $in: studentIds,
         },
-        divisionId,
+        divisionId, 
         status: "active",
       }).lean(),
     ]);
@@ -152,38 +152,34 @@ export const markAttendanceService = async (
     }
   }
 
-  /* =========================================
-     SAVE ATTENDANCE
-  ========================================= */
+/* =========================================
+   SAVE ATTENDANCE
+========================================= */
 
-  const operations = students.map(
-    (student) => ({
-      updateOne: {
-        filter: {
-          studentId: student.studentId,
-          date: attendanceDate,
-        },
-        update: {
-          $set: {
-            date: attendanceDate,
-            classId,
-            divisionId,
-            studentId: student.studentId,
-            status: student.status,
-            reason:
-              student.reason || "",
-            file: student.file || "",
-            markedBy: userId,
-          },
-        },
-        upsert: true,
+const operations = students.map((student) => ({
+  updateOne: {
+    filter: {
+      studentId: student.studentId,
+      divisionId,
+      date: attendanceDate,
+    },
+    update: {
+      $set: {
+        date: attendanceDate,
+        classId,
+        divisionId,
+        studentId: student.studentId,
+        status: student.status,
+        reason: student.reason?.trim() || "",
+ 
+        markedBy: userId,
       },
-    })
-  );
+    },
+    upsert: true,
+  },
+}));
 
-  await AttendanceModel.bulkWrite(
-    operations
-  );
+await AttendanceModel.bulkWrite(operations);
 
   return AttendanceModel.find({
     divisionId,
@@ -250,3 +246,37 @@ export const getDivisionAttendanceService =
       })
       .lean();
   };
+
+
+  /* =========================================
+   UPLOAD ATTENDANCE FILE
+========================================= */
+
+export const uploadAttendanceFileService = async (
+  attendanceId,
+  files,
+  userId
+) => {
+  const attendance =
+    await AttendanceModel.findById(attendanceId);
+
+  if (!attendance) {
+    throw new ApiError(
+      404,
+      "Attendance record not found."
+    );
+  }
+
+  for (const file of files) {
+    attendance.documents.push({
+      url: file.path,
+      publicId: file.filename,
+      fileName: file.originalname,
+      uploadedBy: userId,
+    });
+  }
+
+  await attendance.save();
+
+  return attendance.populate(attendancePopulate);
+};

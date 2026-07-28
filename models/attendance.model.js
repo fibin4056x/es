@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 
+
 const attendanceSchema = new mongoose.Schema(
   {
     date: {
@@ -37,10 +38,35 @@ const attendanceSchema = new mongoose.Schema(
       trim: true,
     },
 
-    file: {
+documents: [
+  {
+    url: {
       type: String,
-      default: "",
+      required: true,
     },
+
+    publicId: {
+      type: String,
+      required: true,
+    },
+
+    fileName: {
+      type: String,
+      required: true,
+    },
+
+    uploadedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+
+    uploadedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+],
 
     markedBy: {
       type: mongoose.Schema.Types.ObjectId,
@@ -57,6 +83,7 @@ const attendanceSchema = new mongoose.Schema(
 attendanceSchema.index(
   {
     studentId: 1,
+    divisionId: 1,
     date: 1,
   },
   {

@@ -1,9 +1,11 @@
 import express from "express";
+import upload from "../middleware/upload.middleware.js";
 
 import {
   markAttendanceController,
   getAttendanceByDateController,
   getDivisionAttendanceController,
+  uploadAttendanceFileController
 } from "../controllers/attendance.controller.js";
 
 import {
@@ -34,7 +36,7 @@ router.post(
     "principal",
     "teacher"
   ),
-
+  upload.any(),
   validateAttendance,
 
   markAttendanceController
@@ -51,7 +53,7 @@ router.get(
 
   authorize(
     "principal",
-    "teacher"
+    "teacher" 
   ),
 
   getAttendanceByDateController
@@ -73,5 +75,18 @@ router.get(
 
   getDivisionAttendanceController
 );
+
+
+// file upload route
+router.patch(
+  "/:id/document",
+  authenticate,
+  authorize(
+    "principal",
+    "teacher" 
+  ),
+  upload.array("document", 10),
+  uploadAttendanceFileController
+)
 
 export default router;
