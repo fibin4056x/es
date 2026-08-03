@@ -1,5 +1,5 @@
 import asyncHandler from "../utils/asyncHandler.js";
-import { loginService, getMeService } from "../services/auth.service.js";
+import { loginService, getMeService, updateProfileService } from "../services/auth.service.js";
 import ApiResponse from "../utils/apiResponse.js";
 
 /* ==================================================
@@ -30,5 +30,16 @@ export const getMe = asyncHandler(async (req, res) => {
 
   res.status(200).json(
     new ApiResponse(200, data)
+  );
+});
+
+/* ==================================================
+   UPDATE PROFILE
+================================================== */
+export const updateProfile = asyncHandler(async (req, res) => {
+  const data = await updateProfileService(req.user.id, req.body);
+
+  res.status(200).json(
+    new ApiResponse(200, data, "Profile updated successfully")
   );
 });

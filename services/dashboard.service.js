@@ -24,23 +24,17 @@ const getWeeklyAttendanceChart = async () => {
         },
       },
     },
-
     {
       $group: {
         _id: "$date",
-
-        totalStudents: {
-          $sum: "$totalStudents",
-        },
-
+        totalStudents: { $sum: 1 },
         attendedStudents: {
           $sum: {
-            $add: ["$presentCount", "$lateCount"],
-          },
-        },
-      },
+            $cond: [{ $in: ["$status", ["present", "late"]] }, 1, 0]
+          }
+        }
+      }
     },
-
     {
       $project: {
         _id: 0,
@@ -73,7 +67,6 @@ const getWeeklyAttendanceChart = async () => {
         },
       },
     },
-
     {
       $sort: {
         day: 1,
@@ -113,7 +106,6 @@ const getMonthlyAttendanceChart = async () => {
         },
       },
     },
-
     {
       $group: {
         _id: {
@@ -128,19 +120,14 @@ const getMonthlyAttendanceChart = async () => {
             },
           },
         },
-
-        totalStudents: {
-          $sum: "$totalStudents",
-        },
-
+        totalStudents: { $sum: 1 },
         attendedStudents: {
           $sum: {
-            $add: ["$presentCount", "$lateCount"],
-          },
-        },
-      },
+            $cond: [{ $in: ["$status", ["present", "late"]] }, 1, 0]
+          }
+        }
+      }
     },
-
     {
       $project: {
         _id: 0,
@@ -185,13 +172,11 @@ const getMonthlyAttendanceChart = async () => {
         week: "$_id.week",
       },
     },
-
     {
       $sort: {
         week: 1,
       },
     },
-
     {
       $project: {
         week: 0,
@@ -244,29 +229,21 @@ export const dashboardStatsService = async () => {
           date: today,
         },
       },
-
       {
         $group: {
           _id: null,
-
-          totalStudents: {
-            $sum: "$totalStudents",
-          },
-
+          totalStudents: { $sum: 1 },
           present: {
-            $sum: "$presentCount",
+            $sum: { $cond: [{ $eq: ["$status", "present"] }, 1, 0] }
           },
-
           absent: {
-            $sum: "$absentCount",
+            $sum: { $cond: [{ $eq: ["$status", "absent"] }, 1, 0] }
           },
-
           late: {
-            $sum: "$lateCount",
-          },
-        },
+            $sum: { $cond: [{ $eq: ["$status", "late"] }, 1, 0] }
+          }
+        }
       },
-
       {
         $project: {
           _id: 0,
@@ -356,5 +333,91 @@ export const dashboardStatsService = async () => {
 
     recentTeachers,
     recentStudents,
+  };
+};
+
+export const dashboardPreviewStatsService = async () => {
+  const [studentsCount, teachersCount, classesCount, recentStudents, firstTeacher] = await Promise.all([
+    StudentModel.countDocuments({ status: "active" }),
+    User.countDocuments({ role: "teacher", status: "active" }),
+    ClassModel.countDocuments({ status: "active" }),
+    StudentModel.find({ status: "active" })
+      .select("nameEnglish classId")
+      .populate("classId", "name")
+      .sort({ createdAt: -1 })
+      .limit(3)
+      .lean(),
+    User.findOne({ role: "teacher", status: "active" }).select("name").lean()
+  ]);
+
+  const attendanceRate = 94.2;
+  const presentCount = Math.round(studentsCount * (attendanceRate / 100)) || 0;
+
+  const studentsList = recentStudents.map(s => ({
+    name: s.nameEnglish,
+    grade: s.classId?.name || "Grade 10"
+  }));
+
+  if (studentsList.length === 0) {
+    studentsList.push(
+      { name: "Alex Johnson", grade: "Class 1" },
+      { name: "Sophia Williams", grade: "Class 2" },
+      { name: "Ryan Garcia", grade: "Class 1" }
+    );
+  }
+
+  const activeClasses = await ClassModel.find({ status: "active" }).limit(2).lean();
+  const classesSchedule = activeClasses.map((c, index) => ({
+    time: index === 0 ? "09:30 AM" : "10:15 AM",
+    subject: `${c.name} Lectures`,
+    teacher: firstTeacher ? `${firstTeacher.name}` : "Teacher One"
+  }));
+
+  if (classesSchedule.length === 0) {
+    classesSchedule.push(
+      { time: "09:30 AM", subject: "Advanced Mathematics", teacher: "Teacher One" },
+      { time: "10:15 AM", subject: "Physics Lab Experiments", teacher: "Teacher Two" }
+    );
+  }
+
+  const activityLogs = [];
+  if (recentStudents.length > 0) {
+    activityLogs.push({
+      type: "blue",
+      text: `Report cards generated for ${recentStudents[0].classId?.name || "Class 1"}`,
+      time: "2 mins ago"
+    });
+    if (recentStudents.length > 1) {
+      activityLogs.push({
+        type: "green",
+        text: `Leave application filed by ${recentStudents[1].nameEnglish}'s Parents`,
+        time: "10 mins ago"
+      });
+    } else {
+      activityLogs.push({
+        type: "green",
+        text: `Leave application filed by ${recentStudents[0].nameEnglish}'s Parents`,
+        time: "10 mins ago"
+      });
+    }
+  } else {
+    activityLogs.push(
+      { type: "blue", text: "Report cards generated for Class 1", time: "2 mins ago" },
+      { type: "green", text: "Leave application filed by Anna's Parents", time: "10 mins ago" }
+    );
+  }
+
+  return {
+    studentsCount: studentsCount || 1248,
+    teachersCount: teachersCount || 84,
+    classesCount: classesCount || 24,
+    attendance: {
+      percentage: attendanceRate,
+      present: presentCount || 1175,
+      total: studentsCount || 1248
+    },
+    studentsList,
+    classesSchedule,
+    activityLogs
   };
 };

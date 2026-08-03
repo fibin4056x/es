@@ -91,3 +91,23 @@ export const validateUserFromToken = async (userId) => {
   return buildUser(user);
 };
 
+export const updateProfileService = async (userId, { name, email }) => {
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+
+  if (name) user.name = name;
+  if (email) {
+    email = email.trim().toLowerCase();
+    const existing = await User.findOne({ email, _id: { $ne: userId } });
+    if (existing) {
+      throw new ApiError(400, "Email already in use");
+    }
+    user.email = email;
+  }
+
+  await user.save();
+  return buildUser(user);
+};
+
