@@ -55,21 +55,18 @@ const attendanceSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Class",
       required: true,
-      index: true,
     },
 
     divisionId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Division",
       required: true,
-      index: true,
     },
 
     studentId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Student",
       required: true,
-      index: true,
     },
 
     status: {
@@ -78,7 +75,6 @@ const attendanceSchema = new mongoose.Schema(
       required: true,
       lowercase: true,
       trim: true,
-      index: true,
     },
 
     reason: {
@@ -101,7 +97,6 @@ const attendanceSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      index: true,
     },
   },
   {
@@ -128,18 +123,7 @@ attendanceSchema.index(
 );
 
 /* =========================================
-   FILTER INDEXES
-========================================= */
-
-attendanceSchema.index({ classId: 1 });
-attendanceSchema.index({ divisionId: 1 });
-attendanceSchema.index({ studentId: 1 });
-attendanceSchema.index({ status: 1 });
-attendanceSchema.index({ date: -1 });
-attendanceSchema.index({ markedBy: 1 });
-
-/* =========================================
-   COMPOUND INDEXS FOR REPORTS
+   QUERY INDEXES
 ========================================= */
 
 attendanceSchema.index({
@@ -151,6 +135,11 @@ attendanceSchema.index({
 attendanceSchema.index({
   divisionId: 1,
   status: 1,
+  date: -1,
+});
+
+attendanceSchema.index({
+  studentId: 1,
   date: -1,
 });
 
