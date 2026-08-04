@@ -6,6 +6,8 @@ import studentRoutes from "./student.routes.js";
 import divisionRoutes from "./division.routes.js";
 import attendanceRoutes from "./attendance.routes.js";
 import dashboardRoutes from "./dashboard.routes.js";
+import exportRoutes from "./export.routes.js";
+
 const router = express.Router();
 
 router.use("/auth", authRoutes);
@@ -15,5 +17,7 @@ router.use("/dashboard", dashboardRoutes);
 router.use("/attendance", attendanceRoutes);
 router.use("/students", studentRoutes);
 router.use("/divisions", divisionRoutes);
+router.use("/export", exportRoutes);
 
 export default router;
+
