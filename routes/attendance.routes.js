@@ -5,7 +5,11 @@ import {
   markAttendanceController,
   getAttendanceByDateController,
   getDivisionAttendanceController,
-  uploadAttendanceFileController
+  uploadAttendanceFileController,
+  updateAttendanceController,
+  replaceAttendanceDocumentController,
+  deleteAttendanceDocumentController,
+  deleteAttendanceController,
 } from "../controllers/attendance.controller.js";
 
 import {
@@ -20,8 +24,7 @@ import {
   validateAttendance,
 } from "../middleware/validateAttendance.middleware.js";
 
-const router =
-  express.Router();
+const router = express.Router();
 
 /* =========================================
    MARK ATTENDANCE
@@ -29,16 +32,12 @@ const router =
 
 router.post(
   "/",
-
   authenticate,
-
   authorize(
     "principal",
     "teacher"
   ),
-  upload.any(),
   validateAttendance,
-
   markAttendanceController
 );
 
@@ -48,45 +47,98 @@ router.post(
 
 router.get(
   "/division/:divisionId",
-
   authenticate,
-
   authorize(
     "principal",
-    "teacher" 
+    "teacher"
   ),
-
   getAttendanceByDateController
 );
 
 /* =========================================
-   GET DIVISION HISTORY
+   GET DIVISION ATTENDANCE HISTORY
 ========================================= */
 
 router.get(
   "/history/:divisionId",
-
   authenticate,
-
   authorize(
-
+    "principal",
     "teacher"
   ),
-
   getDivisionAttendanceController
 );
 
+/* =========================================
+   UPDATE ATTENDANCE
+========================================= */
 
-// file upload route
+router.patch(
+  "/:id",
+  authenticate,
+  authorize(
+    "principal",
+    "teacher"
+  ),
+  updateAttendanceController
+);
+
+/* =========================================
+   UPLOAD ATTENDANCE DOCUMENTS
+========================================= */
+
 router.patch(
   "/:id/document",
   authenticate,
   authorize(
     "principal",
-    "teacher" 
+    "teacher"
   ),
   upload.array("document", 10),
   uploadAttendanceFileController
-)
+);
+
+/* =========================================
+   REPLACE ATTENDANCE DOCUMENT
+========================================= */
+
+router.patch(
+  "/:attendanceId/document/:documentId",
+  authenticate,
+  authorize(
+    "principal",
+    "teacher"
+  ),
+  upload.single("document"),
+  replaceAttendanceDocumentController
+);
+
+/* =========================================
+   DELETE ATTENDANCE DOCUMENT
+========================================= */
+
+router.delete(
+  "/:attendanceId/document/:documentId",
+  authenticate,
+  authorize(
+    "principal",
+    "teacher"
+  ),
+  deleteAttendanceDocumentController
+);
+
+/* =========================================
+   DELETE ATTENDANCE
+========================================= */
+
+router.delete(
+  "/:id",
+  authenticate,
+  authorize(
+    "principal",
+    "teacher"
+  ),
+  deleteAttendanceController
+);
 
 export default router;
