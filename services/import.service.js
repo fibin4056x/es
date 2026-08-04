@@ -63,6 +63,10 @@ export const importStudentsService = async (records) => {
     const className = row.className ? String(row.className).trim() : "";
     const divisionName = row.divisionName ? String(row.divisionName).trim() : "";
 
+    // Phone & Aadhaar Cleaning
+    const cleanPhone = parentPhone.replace(/\D/g, "").slice(-10);
+    const cleanAadhaar = row.aadhaarNumber ? String(row.aadhaarNumber).replace(/\D/g, "") : "";
+
     // Validation 1: Required Fields
     const missingFields = [];
     if (!admissionNumber) missingFields.push("Admission Number");
@@ -70,7 +74,7 @@ export const importStudentsService = async (records) => {
     if (!gender) missingFields.push("Gender");
     if (!dateOfBirth || isNaN(dateOfBirth.getTime())) missingFields.push("Valid Date of Birth");
     if (!parentName) missingFields.push("Parent Name");
-    if (!parentPhone) missingFields.push("Parent Phone");
+    if (!cleanPhone || !/^[6-9]\d{9}$/.test(cleanPhone)) missingFields.push("Valid 10-digit Parent Phone");
     if (!address) missingFields.push("Address");
     if (!className) missingFields.push("Class");
     if (!divisionName) missingFields.push("Division");
@@ -79,7 +83,17 @@ export const importStudentsService = async (records) => {
       errors.push({
         row: rowNum,
         admissionNumber: admissionNumber || "N/A",
-        reason: `Missing required field(s): ${missingFields.join(", ")}`,
+        reason: `Missing/invalid required field(s): ${missingFields.join(", ")}`,
+      });
+      continue;
+    }
+
+    // Validation 1b: Optional Aadhaar Validation (12 digits if provided)
+    if (cleanAadhaar && cleanAadhaar.length !== 12) {
+      errors.push({
+        row: rowNum,
+        admissionNumber,
+        reason: "Aadhaar number must be exactly 12 digits",
       });
       continue;
     }
@@ -93,6 +107,7 @@ export const importStudentsService = async (records) => {
       });
       continue;
     }
+
 
     // Validation 3: Duplicate Admission Number in File Batch
     const admKey = admissionNumber.toLowerCase();
@@ -142,6 +157,20 @@ export const importStudentsService = async (records) => {
     // Passed all validations -> Add to batch & map tracking
     batchAdmissionNumbers.add(admKey);
 
+    // Normalize Enum Values for Mongoose Schema Compliance
+    let normalizedRelation = "Father";
+    const rawRelation = row.guardianRelation ? String(row.guardianRelation).trim() : "";
+    if (/^father$/i.test(rawRelation)) normalizedRelation = "Father";
+    else if (/^mother$/i.test(rawRelation)) normalizedRelation = "Mother";
+    else if (/^guardian$/i.test(rawRelation)) normalizedRelation = "Guardian";
+
+    const bloodGroup = row.bloodGroup ? String(row.bloodGroup).trim().toUpperCase() : undefined;
+    const validBloodGroups = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+    const normalizedBloodGroup = validBloodGroups.includes(bloodGroup) ? bloodGroup : undefined;
+
+    const economicCategory = row.economicCategory ? String(row.economicCategory).trim().toUpperCase() : undefined;
+    const normalizedEconomicCategory = ["APL", "BPL"].includes(economicCategory) ? economicCategory : undefined;
+
     validStudents.push({
       admissionNumber,
       admissionDate: row.admissionDate && !isNaN(new Date(row.admissionDate).getTime())
@@ -149,22 +178,24 @@ export const importStudentsService = async (records) => {
         : new Date(),
       classId,
       divisionId,
-      rollNumber: row.rollNumber ? Number(row.rollNumber) : undefined,
+      rollNumber: row.rollNumber && !isNaN(Number(row.rollNumber)) ? Number(row.rollNumber) : undefined,
       nameEnglish,
       nameMalayalam: row.nameMalayalam ? String(row.nameMalayalam).trim() : undefined,
       gender,
       dateOfBirth,
-      bloodGroup: row.bloodGroup ? String(row.bloodGroup).trim() : undefined,
+      bloodGroup: normalizedBloodGroup,
       parentName,
-      parentPhone,
-      guardianRelation: row.guardianRelation ? String(row.guardianRelation).trim() : "Father",
+      parentPhone: cleanPhone,
+      guardianRelation: normalizedRelation,
       address,
-      aadhaarNumber: row.aadhaarNumber ? String(row.aadhaarNumber).trim() : undefined,
-      economicCategory: row.economicCategory ? String(row.economicCategory).trim() : undefined,
+      aadhaarNumber: cleanAadhaar || undefined,
+      economicCategory: normalizedEconomicCategory,
       status: row.status && ["active", "inactive"].includes(String(row.status).toLowerCase())
         ? String(row.status).toLowerCase()
         : "active",
     });
+
+
   }
 
   /* =========================================
