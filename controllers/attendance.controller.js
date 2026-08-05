@@ -132,6 +132,8 @@ export const getDivisionAttendanceController =
 
 export const uploadAttendanceFileController =
   asyncHandler(async (req, res) => {
+     console.log(req.files);
+
     const { id } = req.params;
 
     /* =========================================

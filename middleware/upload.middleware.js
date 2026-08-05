@@ -6,7 +6,8 @@ const storage = new CloudinaryStorage({
   cloudinary,
   params: async (req, file) => ({
     folder: "attendance-pdfs",
-    resource_type: "auto",
+    resource_type: "image",
+    format: "pdf",
     public_id: `${Date.now()}-${file.originalname.replace(".pdf", "")}`,
   }),
 });
@@ -18,7 +19,6 @@ const fileFilter = (req, file, cb) => {
 
   cb(null, true);
 };
-
 export default multer({
   storage,
   fileFilter,
