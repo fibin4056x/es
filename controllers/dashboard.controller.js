@@ -6,7 +6,15 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
   const data = await dashboardStatsService();
 
   res.status(200).json(
-    new ApiResponse(200, data)
+    new ApiResponse(200, data, "Dashboard stats fetched successfully")
+  );
+});
+
+export const getDashboardReports = asyncHandler(async (req, res) => {
+  const data = await dashboardStatsService();
+
+  res.status(200).json(
+    new ApiResponse(200, data, "Dashboard reports fetched successfully")
   );
 });
 

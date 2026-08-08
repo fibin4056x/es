@@ -24,7 +24,7 @@ export const markAttendanceController = asyncHandler(
         "Attendance data is required."
       );
     }
-
+     console.log(req.body.students) 
     const attendance =
       await markAttendanceService(
         req.body,

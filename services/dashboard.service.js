@@ -188,76 +188,154 @@ const getMonthlyAttendanceChart = async () => {
 };;
 
 /* =========================================
-   DASHBOARD STATS
+   TOP & LOWEST ATTENDANCE DIVISIONS
+========================================= */
+
+const getDivisionAttendanceRankings = async (limitCount = 5, sortDirection = -1) => {
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  thirtyDaysAgo.setHours(0, 0, 0, 0);
+
+  const rankings = await AttendanceModel.aggregate([
+    {
+      $match: {
+        date: { $gte: thirtyDaysAgo },
+      },
+    },
+    {
+      $group: {
+        _id: "$divisionId",
+        total: { $sum: 1 },
+        attended: {
+          $sum: {
+            $cond: [{ $in: ["$status", ["present", "late"]] }, 1, 0],
+          },
+        },
+      },
+    },
+    {
+      $project: {
+        _id: 1,
+        total: 1,
+        attended: 1,
+        attendanceRate: {
+          $round: [
+            {
+              $cond: [
+                { $eq: ["$total", 0] },
+                0,
+                {
+                  $multiply: [{ $divide: ["$attended", "$total"] }, 100],
+                },
+              ],
+            },
+            1,
+          ],
+        },
+      },
+    },
+    { $sort: { attendanceRate: sortDirection, total: -1 } },
+    { $limit: limitCount },
+    {
+      $lookup: {
+        from: "divisions",
+        localField: "_id",
+        foreignField: "_id",
+        as: "divisionInfo",
+      },
+    },
+    { $unwind: { path: "$divisionInfo", preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: "classes",
+        localField: "divisionInfo.classId",
+        foreignField: "_id",
+        as: "classInfo",
+      },
+    },
+    { $unwind: { path: "$classInfo", preserveNullAndEmptyArrays: true } },
+    {
+      $project: {
+        _id: 0,
+        divisionId: "$_id",
+        divisionName: "$divisionInfo.name",
+        className: "$classInfo.name",
+        attendanceRate: 1,
+        totalRecords: "$total",
+      },
+    },
+  ]);
+
+  return rankings;
+};
+
+/* =========================================
+   DASHBOARD STATS & REPORTS
 ========================================= */
 
 export const dashboardStatsService = async () => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
+  const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
+
   const [
-    students,
-    teachers,
-    classes,
+    activeStudents,
+    inactiveStudents,
+    totalStudents,
+    activeTeachers,
+    inactiveTeachers,
+    totalTeachers,
+    classesCount,
     todayAttendance,
     recentTeachers,
     recentStudents,
     weeklyChart,
     monthlyChart,
+    topDivisions,
+    lowestDivisions,
+    holidayCount,
   ] = await Promise.all([
-    
-    // Total Active Students
-    StudentModel.countDocuments({
-      status: "active",
-    }),
+    StudentModel.countDocuments({ status: "active" }),
+    StudentModel.countDocuments({ status: "inactive" }),
+    StudentModel.countDocuments({}),
+    User.countDocuments({ role: "teacher", status: "active" }),
+    User.countDocuments({ role: "teacher", status: { $ne: "active" } }),
+    User.countDocuments({ role: "teacher" }),
+    ClassModel.countDocuments({ status: "active" }),
 
-    // Total Active Teachers
-    User.countDocuments({
-      role: "teacher",
-      status: "active",
-    }),
-
-    // Total Active Classes
-    ClassModel.countDocuments({
-      status: "active",
-    }),
-
-    // Today's Attendance Summary
     AttendanceModel.aggregate([
-      {
-        $match: {
-          date: today,
-        },
-      },
+      { $match: { date: today } },
       {
         $group: {
           _id: null,
           totalStudents: { $sum: 1 },
           present: {
-            $sum: { $cond: [{ $eq: ["$status", "present"] }, 1, 0] }
+            $sum: { $cond: [{ $eq: ["$status", "present"] }, 1, 0] },
           },
           absent: {
-            $sum: { $cond: [{ $eq: ["$status", "absent"] }, 1, 0] }
+            $sum: { $cond: [{ $eq: ["$status", "absent"] }, 1, 0] },
           },
           late: {
-            $sum: { $cond: [{ $eq: ["$status", "late"] }, 1, 0] }
-          }
-        }
+            $sum: { $cond: [{ $eq: ["$status", "late"] }, 1, 0] },
+          },
+          leave: {
+            $sum: { $cond: [{ $eq: ["$status", "leave"] }, 1, 0] },
+          },
+        },
       },
       {
         $project: {
           _id: 0,
-
           totalStudents: 1,
           present: 1,
           absent: 1,
           late: 1,
-
+          leave: 1,
           percentage: {
             $cond: [
-              {
-                $eq: ["$totalStudents", 0],
-              },
+              { $eq: ["$totalStudents", 0] },
               0,
               {
                 $round: [
@@ -265,7 +343,7 @@ export const dashboardStatsService = async () => {
                     $multiply: [
                       {
                         $divide: [
-                          "$present",
+                          { $add: ["$present", "$late"] },
                           "$totalStudents",
                         ],
                       },
@@ -281,56 +359,66 @@ export const dashboardStatsService = async () => {
       },
     ]),
 
-    // Latest 5 Teachers
-    User.find({
-      role: "teacher",
-      status: "active",
-    })
+    User.find({ role: "teacher", status: "active" })
       .select("name email")
       .sort({ createdAt: -1 })
       .limit(5)
       .lean(),
 
-    // Latest 5 Students
-    StudentModel.find({
-      status: "active",
-    })
-      .select(
-        "nameEnglish admissionNumber photo status classId"
-      )
+    StudentModel.find({ status: "active" })
+      .select("nameEnglish admissionNumber photo status classId")
       .populate("classId", "name")
       .sort({ createdAt: -1 })
       .limit(5)
       .lean(),
 
-    // Weekly Chart
     getWeeklyAttendanceChart(),
-
-    // Monthly Chart
     getMonthlyAttendanceChart(),
+    getDivisionAttendanceRankings(5, -1),
+    getDivisionAttendanceRankings(5, 1),
+    
+    // Holiday Count in current month
+    import("../models/academicCalendar.model.js").then((m) =>
+      m.default.countDocuments({
+        status: "active",
+        category: { $in: ["holiday", "vacation"] },
+        startDate: { $lte: lastDayOfMonth },
+        endDate: { $gte: firstDayOfMonth },
+      })
+    ),
   ]);
 
-  const attendance =
-    todayAttendance[0] || {
-      totalStudents: 0,
-      present: 0,
-      absent: 0,
-      late: 0,
-      percentage: 0,
-    };
+  const attendance = todayAttendance[0] || {
+    totalStudents: 0,
+    present: 0,
+    absent: 0,
+    late: 0,
+    leave: 0,
+    percentage: 0,
+  };
 
   return {
-    students,
-    teachers,
-    classes,
-
+    studentStats: {
+      active: activeStudents,
+      inactive: inactiveStudents,
+      total: totalStudents,
+    },
+    teacherStats: {
+      active: activeTeachers,
+      inactive: inactiveTeachers,
+      total: totalTeachers,
+    },
+    students: activeStudents,
+    teachers: activeTeachers,
+    classes: classesCount,
+    holidayCount,
     attendance,
-
     attendanceChart: {
       weekly: weeklyChart,
       monthly: monthlyChart,
     },
-
+    topDivisions,
+    lowestDivisions,
     recentTeachers,
     recentStudents,
   };

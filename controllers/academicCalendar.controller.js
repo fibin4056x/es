@@ -4,10 +4,12 @@ import {
   getAcademicCalendarByIdService,
   updateAcademicCalendarService,
   deleteAcademicCalendarService,
+  restoreAcademicCalendarService,
+  getAcademicReportsService,
   getCalendarMonthService,
   getWorkingDaysService,
   getUpcomingEventsService,
-} from "../services/academicCalendar.service.js"; // adjust path to wherever the service file lives
+} from "../services/academicCalendar.service.js";
 
 /* =========================================
    CREATE
@@ -85,12 +87,13 @@ export async function getAcademicCalendarByIdController(req, res, next) {
 
 /* =========================================
    UPDATE
-   PUT /api/academic-calendar/:id
+   PATCH /api/academic-calendar/:id
 ========================================= */
 export async function updateAcademicCalendarController(req, res, next) {
   try {
     const { id } = req.params;
-    const entry = await updateAcademicCalendarService(id, req.body);
+    const userId = req.user?.id || req.user?._id;
+    const entry = await updateAcademicCalendarService(id, req.body, userId);
 
     res.status(200).json({
       message: "Academic calendar entry updated",
@@ -108,15 +111,61 @@ export async function updateAcademicCalendarController(req, res, next) {
 export async function deleteAcademicCalendarController(req, res, next) {
   try {
     const { id } = req.params;
+    const userId = req.user?.id || req.user?._id;
     const hardDelete = req.query.hard === "true";
 
-    const entry = await deleteAcademicCalendarService(id, { hardDelete });
+    const entry = await deleteAcademicCalendarService(id, userId, { hardDelete });
 
     res.status(200).json({
       message: hardDelete
         ? "Academic calendar entry permanently deleted"
         : "Academic calendar entry deactivated",
       data: entry,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/* =========================================
+   RESTORE SOFT DELETED CALENDAR ENTRY
+   PATCH /api/academic-calendar/:id/restore
+========================================= */
+export async function restoreAcademicCalendarController(req, res, next) {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id || req.user?._id;
+
+    const entry = await restoreAcademicCalendarService(id, userId);
+
+    res.status(200).json({
+      message: "Academic calendar entry restored successfully",
+      data: entry,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/* =========================================
+   ACADEMIC REPORTS
+   GET /api/academic-calendar/reports
+========================================= */
+export async function getAcademicReportsController(req, res, next) {
+  try {
+    const { startDate, endDate, classId, divisionId, academicYear } = req.query;
+
+    const report = await getAcademicReportsService({
+      startDate,
+      endDate,
+      classId,
+      divisionId,
+      academicYear,
+    });
+
+    res.status(200).json({
+      message: "Academic report fetched successfully",
+      data: report,
     });
   } catch (err) {
     next(err);
@@ -155,7 +204,6 @@ export async function getWorkingDaysController(req, res, next) {
       endDate,
       classId,
       divisionId,
-      // query params arrive as strings, so only "false" should disable the default
       excludeWeekends: excludeWeekends === "false" ? false : true,
     });
 

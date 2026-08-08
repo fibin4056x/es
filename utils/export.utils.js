@@ -1,4 +1,4 @@
-import XLSX from "xlsx";
+import ExcelJS from "exceljs";
 
 /* =========================================
    DATE FORMATTER HELPER
@@ -26,11 +26,6 @@ const sanitizeFileNamePart = (str) => {
 
 /* =========================================
    GENERATE PROFESSIONAL FILENAMES
-   Examples:
-   - students-2026-08-04.csv
-   - students-class-10.xlsx
-   - students-division-a.csv
-   - students-teacher-john.xlsx
 ========================================= */
 
 export const generateFileName = (metadata, format) => {
@@ -57,76 +52,106 @@ export const generateFileName = (metadata, format) => {
 };
 
 /* =========================================
-   GENERATE EXPORT BUFFER (CSV / XLSX)
+   GENERATE EXPORT BUFFER (EXCELJS)
 ========================================= */
 
-export const generateExportBuffer = ({ metadata, data, format }) => {
-  const formattedData = (data || []).map((row) => ({
-    "Admission No": row.admissionNumber || "",
-    "Admission Date": formatDate(row.admissionDate),
-    "Roll No": row.rollNumber ?? "",
-    "Name (English)": row.nameEnglish || "",
-    "Name (Malayalam)": row.nameMalayalam || "",
-    Gender: row.gender || "",
-    "Date of Birth": formatDate(row.dateOfBirth),
-    "Blood Group": row.bloodGroup || "",
-    Class: row.className || "",
-    "Academic Year": row.academicYear || "",
-    Division: row.divisionName || "",
-    "Parent/Guardian Name": row.parentName || "",
-    "Parent Phone": row.parentPhone || "",
-    Relation: row.guardianRelation || "",
-    Address: row.address || "",
-    "Aadhaar Number": row.aadhaarNumber || "",
-    "Economic Category": row.economicCategory || "",
-    Status: row.status || "",
-  }));
+export const generateExportBuffer = async ({ metadata, data, format }) => {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "School LMS";
+  workbook.created = new Date();
 
-  const defaultHeaders = [
-    "Admission No",
-    "Admission Date",
-    "Roll No",
-    "Name (English)",
-    "Name (Malayalam)",
-    "Gender",
-    "Date of Birth",
-    "Blood Group",
-    "Class",
-    "Academic Year",
-    "Division",
-    "Parent/Guardian Name",
-    "Parent Phone",
-    "Relation",
-    "Address",
-    "Aadhaar Number",
-    "Economic Category",
-    "Status",
+  const worksheet = workbook.addWorksheet("Students", {
+    views: [{ showGridLines: true }],
+  });
+
+  const columns = [
+    { header: "Admission No", key: "admissionNumber", width: 18 },
+    { header: "Admission Date", key: "admissionDate", width: 15 },
+    { header: "Roll No", key: "rollNumber", width: 10 },
+    { header: "Name (English)", key: "nameEnglish", width: 25 },
+    { header: "Name (Malayalam)", key: "nameMalayalam", width: 25 },
+    { header: "Gender", key: "gender", width: 12 },
+    { header: "Date of Birth", key: "dateOfBirth", width: 15 },
+    { header: "Blood Group", key: "bloodGroup", width: 14 },
+    { header: "Class", key: "className", width: 12 },
+    { header: "Academic Year", key: "academicYear", width: 16 },
+    { header: "Division", key: "divisionName", width: 12 },
+    { header: "Parent/Guardian Name", key: "parentName", width: 24 },
+    { header: "Parent Phone", key: "parentPhone", width: 16 },
+    { header: "Relation", key: "guardianRelation", width: 14 },
+    { header: "Address", key: "address", width: 30 },
+    { header: "Aadhaar Number", key: "aadhaarNumber", width: 18 },
+    { header: "Economic Category", key: "economicCategory", width: 18 },
+    { header: "Status", key: "status", width: 12 },
   ];
 
-  const worksheet =
-    formattedData.length > 0
-      ? XLSX.utils.json_to_sheet(formattedData)
-      : XLSX.utils.json_to_sheet([], { header: defaultHeaders });
+  worksheet.columns = columns;
 
-  // Auto-fit column widths
-  if (formattedData.length > 0) {
-    const colWidths = Object.keys(formattedData[0]).map((key) => {
-      const maxLen = Math.max(
-        key.length,
-        ...formattedData.map((row) => String(row[key] || "").length)
-      );
-      return { wch: Math.min(Math.max(maxLen + 2, 10), 40) };
+  // Add Data Rows
+  (data || []).forEach((row) => {
+    worksheet.addRow({
+      admissionNumber: row.admissionNumber || "",
+      admissionDate: formatDate(row.admissionDate),
+      rollNumber: row.rollNumber ?? "",
+      nameEnglish: row.nameEnglish || "",
+      nameMalayalam: row.nameMalayalam || "",
+      gender: row.gender || "",
+      dateOfBirth: formatDate(row.dateOfBirth),
+      bloodGroup: row.bloodGroup || "",
+      className: row.className || "",
+      academicYear: row.academicYear || "",
+      divisionName: row.divisionName || "",
+      parentName: row.parentName || "",
+      parentPhone: row.parentPhone || "",
+      guardianRelation: row.guardianRelation || "",
+      address: row.address || "",
+      aadhaarNumber: row.aadhaarNumber || "",
+      economicCategory: row.economicCategory || "",
+      status: row.status || "",
     });
-    worksheet["!cols"] = colWidths;
-  }
+  });
 
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Students");
+  // Professional Header Styling for Excel
+  const headerRow = worksheet.getRow(1);
+  headerRow.height = 28;
+  headerRow.eachCell((cell) => {
+    cell.font = {
+      name: "Calibri",
+      size: 11,
+      bold: true,
+      color: { argb: "FFFFFF" },
+    };
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "1F4E78" },
+    };
+    cell.alignment = { vertical: "middle", horizontal: "center" };
+    cell.border = {
+      top: { style: "thin", color: { argb: "D9D9D9" } },
+      bottom: { style: "medium", color: { argb: "1F4E78" } },
+      left: { style: "thin", color: { argb: "D9D9D9" } },
+      right: { style: "thin", color: { argb: "D9D9D9" } },
+    };
+  });
+
+  // Auto-fit column widths based on content
+  worksheet.columns.forEach((column) => {
+    let maxLen = column.header ? String(column.header).length : 10;
+    column.eachCell({ includeEmpty: true }, (cell) => {
+      const cellLen = cell.value ? String(cell.value).length : 0;
+      if (cellLen > maxLen) {
+        maxLen = cellLen;
+      }
+    });
+    column.width = Math.min(Math.max(maxLen + 3, 12), 45);
+  });
 
   const filename = generateFileName(metadata, format);
 
   if (format === "xlsx") {
-    const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+    const rawBuffer = await workbook.xlsx.writeBuffer();
+    const buffer = Buffer.from(rawBuffer);
     return {
       buffer,
       filename,
@@ -134,9 +159,9 @@ export const generateExportBuffer = ({ metadata, data, format }) => {
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     };
   } else {
-    // CSV format with UTF-8 BOM for Excel compatibility
-    const csvString = XLSX.utils.sheet_to_csv(worksheet);
-    const buffer = Buffer.from("\uFEFF" + csvString, "utf-8");
+    // CSV format with UTF-8 BOM for Microsoft Excel compatibility
+    const rawBuffer = await workbook.csv.writeBuffer();
+    const buffer = Buffer.concat([Buffer.from("\uFEFF", "utf-8"), Buffer.from(rawBuffer)]);
     return {
       buffer,
       filename,

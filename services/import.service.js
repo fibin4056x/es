@@ -7,7 +7,9 @@ import ApiError from "../utils/ApiError.js";
    BULK IMPORT STUDENTS SERVICE
 ========================================= */
 
-export const importStudentsService = async (records) => {
+export const importStudentsService = async (records, options = {}) => {
+  const { classId: defaultClassId, divisionId: defaultDivisionId } = options;
+
   if (!Array.isArray(records) || records.length === 0) {
     throw new ApiError(400, "Import file contains no valid student records");
   }
@@ -19,6 +21,27 @@ export const importStudentsService = async (records) => {
   const classes = await ClassModel.find({});
   const divisions = await DivisionModel.find({}).populate("classId", "name");
   const existingStudents = await StudentModel.find({}).select("admissionNumber");
+
+  // Validate optional default classId and divisionId if provided
+  let targetClass = null;
+  let targetDivision = null;
+
+  if (defaultClassId) {
+    targetClass = classes.find((c) => c._id.toString() === String(defaultClassId));
+    if (!targetClass) {
+      throw new ApiError(404, "Target class specified for import not found");
+    }
+  }
+
+  if (defaultDivisionId) {
+    targetDivision = divisions.find((d) => d._id.toString() === String(defaultDivisionId));
+    if (!targetDivision) {
+      throw new ApiError(404, "Target division specified for import not found");
+    }
+    if (targetClass && targetDivision.classId?._id?.toString() !== targetClass._id.toString()) {
+      throw new ApiError(400, "Target division does not belong to the specified target class");
+    }
+  }
 
   // Class Name -> Class ID Map
   const classMap = new Map();
@@ -67,6 +90,23 @@ export const importStudentsService = async (records) => {
     const cleanPhone = parentPhone.replace(/\D/g, "").slice(-10);
     const cleanAadhaar = row.aadhaarNumber ? String(row.aadhaarNumber).replace(/\D/g, "") : "";
 
+    // Determine target classId & divisionId
+    let resolvedClassId = null;
+    let resolvedDivisionId = null;
+
+    if (className) {
+      resolvedClassId = classMap.get(className.toLowerCase());
+    } else if (targetClass) {
+      resolvedClassId = targetClass._id;
+    }
+
+    if (className && divisionName) {
+      const divKey = `${className.toLowerCase()}_${divisionName.toLowerCase()}`;
+      resolvedDivisionId = divisionMap.get(divKey);
+    } else if (targetDivision) {
+      resolvedDivisionId = targetDivision._id;
+    }
+
     // Validation 1: Required Fields
     const missingFields = [];
     if (!admissionNumber) missingFields.push("Admission Number");
@@ -76,8 +116,8 @@ export const importStudentsService = async (records) => {
     if (!parentName) missingFields.push("Parent Name");
     if (!cleanPhone || !/^[6-9]\d{9}$/.test(cleanPhone)) missingFields.push("Valid 10-digit Parent Phone");
     if (!address) missingFields.push("Address");
-    if (!className) missingFields.push("Class");
-    if (!divisionName) missingFields.push("Division");
+    if (!resolvedClassId) missingFields.push("Valid Class");
+    if (!resolvedDivisionId) missingFields.push("Valid Division");
 
     if (missingFields.length > 0) {
       errors.push({
@@ -108,7 +148,6 @@ export const importStudentsService = async (records) => {
       continue;
     }
 
-
     // Validation 3: Duplicate Admission Number in File Batch
     const admKey = admissionNumber.toLowerCase();
     if (batchAdmissionNumbers.has(admKey)) {
@@ -126,30 +165,6 @@ export const importStudentsService = async (records) => {
         row: rowNum,
         admissionNumber,
         reason: "Admission number already exists in system",
-      });
-      continue;
-    }
-
-    // Validation 5: Class Lookup
-    const classKey = className.toLowerCase();
-    const classId = classMap.get(classKey);
-    if (!classId) {
-      errors.push({
-        row: rowNum,
-        admissionNumber,
-        reason: `Class '${className}' not found`,
-      });
-      continue;
-    }
-
-    // Validation 6: Division Lookup
-    const divKey = `${classKey}_${divisionName.toLowerCase()}`;
-    const divisionId = divisionMap.get(divKey);
-    if (!divisionId) {
-      errors.push({
-        row: rowNum,
-        admissionNumber,
-        reason: `Division '${divisionName}' not found for Class '${className}'`,
       });
       continue;
     }
@@ -176,8 +191,8 @@ export const importStudentsService = async (records) => {
       admissionDate: row.admissionDate && !isNaN(new Date(row.admissionDate).getTime())
         ? new Date(row.admissionDate)
         : new Date(),
-      classId,
-      divisionId,
+      classId: resolvedClassId,
+      divisionId: resolvedDivisionId,
       rollNumber: row.rollNumber && !isNaN(Number(row.rollNumber)) ? Number(row.rollNumber) : undefined,
       nameEnglish,
       nameMalayalam: row.nameMalayalam ? String(row.nameMalayalam).trim() : undefined,
@@ -194,8 +209,6 @@ export const importStudentsService = async (records) => {
         ? String(row.status).toLowerCase()
         : "active",
     });
-
-
   }
 
   /* =========================================

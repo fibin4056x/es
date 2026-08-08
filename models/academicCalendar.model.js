@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
 /* =========================================
-   ACADEMIC CALENDAR SCHEMA
+  ACADEMIC CALENDAR SCHEMA
 ========================================= */
 
 const academicCalendarSchema = new mongoose.Schema(
@@ -101,14 +101,24 @@ const academicCalendarSchema = new mongoose.Schema(
       trim: true,
     },
     updatedBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
-    default: null,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
     },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
+    },
+    deletedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    restoredBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
     },
   },
   {
@@ -119,7 +129,7 @@ const academicCalendarSchema = new mongoose.Schema(
 );
 
 /* =========================================
-   INDEXES
+  INDEXES
 ========================================= */
 
 academicCalendarSchema.index({
@@ -143,7 +153,7 @@ academicCalendarSchema.index({
 });
 
 /* =========================================
-   EXPORT
+  EXPORT
 ========================================= */
 
 const AcademicCalendar = mongoose.model(

@@ -159,24 +159,68 @@ function assertTargetScope(
   }
 }
 
-// Builds the common "school-wide OR this class OR this division" visibility filter
-function buildScopeFilter({ classId, divisionId }) {
-  const or = [{ target: "school" }];
-  if (classId) or.push({ target: "class", classId });
-  if (divisionId) or.push({ target: "division", divisionId });
+/* =========================================
+   BUILD TARGET SCOPE FILTER
+========================================= */
+
+function buildScopeFilter({
+  classId,
+  divisionId,
+}) {
+  const or = [
+    {
+      target: "school",
+    },
+  ];
+
+  if (classId) {
+    assertValidObjectId(
+      classId,
+      "classId"
+    );
+
+    or.push({
+      target: "class",
+      classId,
+    });
+  }
+
+  if (divisionId) {
+    assertValidObjectId(
+      divisionId,
+      "divisionId"
+    );
+
+    or.push({
+      target: "division",
+      divisionId,
+    });
+  }
+
   return or;
 }
 
-function notFoundError(message = "Academic calendar entry not found") {
+/* =========================================
+   NOT FOUND ERROR
+========================================= */
+
+function notFoundError(
+  message = "Academic calendar entry not found."
+) {
   const err = new Error(message);
   err.status = 404;
+
   return err;
 }
 
 /* =========================================
-   CREATE
+   CREATE ACADEMIC CALENDAR
 ========================================= */
-export async function createAcademicCalendarService(payload, userId) {
+
+export async function createAcademicCalendarService(
+  payload,
+  userId
+) {
   const {
     title,
     category,
@@ -188,62 +232,126 @@ export async function createAcademicCalendarService(payload, userId) {
     academicYear,
   } = payload;
 
-  if (!title || !category || !target || !startDate || !endDate || !academicYear) {
+  /* =========================================
+     REQUIRED FIELDS
+  ========================================= */
+
+  if (
+    !title ||
+    !category ||
+    !target ||
+    !startDate ||
+    !endDate ||
+    !academicYear
+  ) {
     const err = new Error(
-      "title, category, target, startDate, endDate and academicYear are required"
+      "title, category, target, startDate, endDate and academicYear are required."
     );
     err.status = 400;
     throw err;
   }
 
-  assertTargetScope(target, classId, divisionId);
-  assertValidDateRange(startDate, endDate);
-  const academicYearRegex = /^\d{4}-\d{4}$/;
+  /* =========================================
+     VALIDATIONS
+  ========================================= */
 
-if (!academicYearRegex.test(academicYear)) {
-  const err = new Error(
-    "Academic year must be in YYYY-YYYY format."
+  assertTargetScope(
+    target,
+    classId,
+    divisionId
   );
-  err.status = 400;
-  throw err;
-};
-  if (!userId) {
-    const err = new Error("createdBy (userId) is required");
+
+  const { start, end } =
+    assertValidDateRange(
+      startDate,
+      endDate
+    );
+
+  const academicYearRegex =
+    /^\d{4}-\d{4}$/;
+
+  if (
+    !academicYearRegex.test(
+      academicYear
+    )
+  ) {
+    const err = new Error(
+      "Academic year must be in YYYY-YYYY format."
+    );
     err.status = 400;
     throw err;
   }
-   const existing = await AcademicCalendar.findOne({
-  title,
-  target,
-  classId: target === "school" ? null : classId,
-  divisionId: target === "division" ? divisionId : null,
-  startDate,
-  endDate,
-  status: "active",
-});
 
-if (existing) {
-  const err = new Error(
-    "Academic calendar entry already exists."
+  assertValidObjectId(
+    userId,
+    "createdBy"
   );
-  err.status = 409;
-  throw err;
-}
-  const entry = await AcademicCalendar.create({
-    ...payload,
-    // keep the scope fields consistent with target, regardless of what was passed in
-    classId: target === "class" ? classId : null,
-    divisionId: target === "division" ? divisionId : null,
-    createdBy: userId,
-  });
+
+  /* =========================================
+     DUPLICATE CHECK
+  ========================================= */
+
+  const existing =
+    await AcademicCalendar.findOne({
+      title,
+      category,
+      target,
+      classId:
+        target === "school"
+          ? null
+          : classId,
+      divisionId:
+        target === "division"
+          ? divisionId
+          : null,
+      startDate: start,
+      endDate: end,
+      status: "active",
+    });
+
+  if (existing) {
+    const err = new Error(
+      "Academic calendar entry already exists."
+    );
+    err.status = 409;
+    throw err;
+  }
+
+  /* =========================================
+     CREATE ENTRY
+  ========================================= */
+
+  const entry =
+    await AcademicCalendar.create({
+      ...payload,
+
+      classId:
+        target === "school"
+          ? null
+          : classId,
+
+      divisionId:
+        target === "division"
+          ? divisionId
+          : null,
+
+      startDate: start,
+      endDate: end,
+
+      createdBy: userId,
+    });
 
   return entry;
 }
 
 /* =========================================
-   LIST (with filters + pagination)
+   GET ACADEMIC CALENDAR
 ========================================= */
-export async function getAcademicCalendarService(filters = {}, pagination = {}) {
+
+export async function getAcademicCalendarService(
+  filters = {},
+  pagination = {}
+) {
   const {
     academicYear,
     category,
@@ -263,192 +371,549 @@ export async function getAcademicCalendarService(filters = {}, pagination = {}) 
     sortOrder = "asc",
   } = pagination;
 
+  /* =========================================
+     BUILD QUERY
+  ========================================= */
+
   const query = {};
-  if (academicYear) query.academicYear = academicYear;
-  if (category) query.category = String(category).toLowerCase();
-  if (target) query.target = String(target).toLowerCase();
-  if (status) query.status = String(status).toLowerCase();
-  if (priority) query.priority = String(priority).toLowerCase();
+
+  if (academicYear) {
+    query.academicYear = academicYear;
+  }
+
+  if (category) {
+    query.category = String(category).toLowerCase();
+  }
+
+  if (target) {
+    query.target = String(target).toLowerCase();
+  }
+
+  if (status) {
+    query.status = String(status).toLowerCase();
+  }
+
+  if (priority) {
+    query.priority = String(priority).toLowerCase();
+  }
 
   if (classId) {
-    assertValidObjectId(classId, "classId");
+    assertValidObjectId(
+      classId,
+      "classId"
+    );
+
     query.classId = classId;
   }
+
   if (divisionId) {
-    assertValidObjectId(divisionId, "divisionId");
+    assertValidObjectId(
+      divisionId,
+      "divisionId"
+    );
+
     query.divisionId = divisionId;
   }
 
-  // date-range overlap filter: entry.endDate >= from AND entry.startDate <= to
+  /* =========================================
+     DATE RANGE FILTER
+  ========================================= */
+
   if (from || to) {
-    query.$and = query.$and || [];
-    if (from) query.$and.push({ endDate: { $gte: new Date(from) } });
-    if (to) query.$and.push({ startDate: { $lte: new Date(to) } });
+    query.$and = [];
+
+    if (from) {
+      const fromDate = new Date(from);
+
+      if (Number.isNaN(fromDate.getTime())) {
+        const err = new Error(
+          "Invalid 'from' date."
+        );
+        err.status = 400;
+        throw err;
+      }
+
+      query.$and.push({
+        endDate: {
+          $gte: fromDate,
+        },
+      });
+    }
+
+    if (to) {
+      const toDate = new Date(to);
+
+      if (Number.isNaN(toDate.getTime())) {
+        const err = new Error(
+          "Invalid 'to' date."
+        );
+        err.status = 400;
+        throw err;
+      }
+
+      query.$and.push({
+        startDate: {
+          $lte: toDate,
+        },
+      });
+    }
   }
 
-  const numericLimit = Number(limit) || 20;
-  const numericPage = Number(page) || 1;
-  const skip = (numericPage - 1) * numericLimit;
-  const sort = { [sortBy]: sortOrder === "desc" ? -1 : 1 };
+  /* =========================================
+     PAGINATION
+  ========================================= */
 
-  const [items, total] = await Promise.all([
-    AcademicCalendar.find(query)
-      .sort(sort)
-      .skip(skip)
-      .limit(numericLimit)
-      .populate("classId", "name")
-      .populate("divisionId", "name")
-      .lean(),
-    AcademicCalendar.countDocuments(query),
-  ]);
+  const numericPage = Math.max(
+    Number(page) || 1,
+    1
+  );
+
+  const numericLimit = Math.max(
+    Number(limit) || 20,
+    1
+  );
+
+  const skip =
+    (numericPage - 1) * numericLimit;
+
+  /* =========================================
+     SORTING
+  ========================================= */
+
+  const sort = {
+    [sortBy]:
+      sortOrder === "desc"
+        ? -1
+        : 1,
+  };
+
+  /* =========================================
+     FETCH DATA
+  ========================================= */
+
+  const [items, total] =
+    await Promise.all([
+      AcademicCalendar.find(query)
+        .sort(sort)
+        .skip(skip)
+        .limit(numericLimit)
+        .populate(
+          "classId",
+          "name"
+        )
+        .populate(
+          "divisionId",
+          "name"
+        )
+        .lean(),
+
+      AcademicCalendar.countDocuments(
+        query
+      ),
+    ]);
+
+  /* =========================================
+     RESPONSE
+  ========================================= */
 
   return {
     items,
     total,
     page: numericPage,
     limit: numericLimit,
-    totalPages: Math.max(Math.ceil(total / numericLimit), 1),
+    totalPages: Math.max(
+      Math.ceil(
+        total / numericLimit
+      ),
+      1
+    ),
   };
 }
 
 /* =========================================
-   GET BY ID
+   GET ACADEMIC CALENDAR BY ID
 ========================================= */
-export async function getAcademicCalendarByIdService(id) {
-  assertValidObjectId(id, "calendar entry ID");
 
-  const entry = await AcademicCalendar.findById(id)
-    .populate("classId", "name")
-    .populate("divisionId", "name")
-    .populate("createdBy", "name email");
+export async function getAcademicCalendarByIdService(
+  id
+) {
+  /* =========================================
+     VALIDATE ID
+  ========================================= */
 
-  if (!entry) throw notFoundError();
-  return entry;
-}
+  assertValidObjectId(
+    id,
+    "Academic Calendar ID"
+  );
 
-/* =========================================
-   UPDATE
-========================================= */
-export async function updateAcademicCalendarService(id, updates = {}, userId) {
-  assertValidObjectId(id, "calendar entry ID");
+  /* =========================================
+     FIND ENTRY
+  ========================================= */
 
-  const entry = await AcademicCalendar.findById(id);
-  if (!entry) throw notFoundError();
+  const entry =
+    await AcademicCalendar.findById(id)
+      .populate(
+        "classId",
+        "name"
+      )
+      .populate(
+        "divisionId",
+        "name"
+      )
+      .populate(
+        "createdBy",
+        "name email"
+      )
+      .lean();
 
-  const nextTarget = updates.target ?? entry.target;
-  const nextClassId = updates.classId !== undefined ? updates.classId : entry.classId;
-  const nextDivisionId =
-    updates.divisionId !== undefined ? updates.divisionId : entry.divisionId;
-  assertTargetScope(nextTarget, nextClassId, nextDivisionId);
+  /* =========================================
+     CHECK ENTRY
+  ========================================= */
 
-  const nextStart = updates.startDate ?? entry.startDate;
-  const nextEnd = updates.endDate ?? entry.endDate;
-  assertValidDateRange(nextStart, nextEnd);
-
-  Object.assign(entry, updates);
-
-  // re-derive scope fields so a target change can't leave a stale classId/divisionId behind
-if (entry.target === "school") {
-  entry.classId = null;
-  entry.divisionId = null;
-}
-
-if (entry.target === "class") {
-  entry.divisionId = null;
-}
-
-// Division keeps BOTH classId and divisionId
- entry.updatedBy = userId; 
-  await entry.save();
-  return entry;
-}
-
-/* =========================================
-   DELETE (soft by default, hard on request)
-========================================= */
-export async function deleteAcademicCalendarService(id, { hardDelete = false } = {}) {
-  assertValidObjectId(id, "calendar entry ID");
-
-  if (hardDelete) {
-    const deleted = await AcademicCalendar.findByIdAndDelete(id);
-    if (!deleted) throw notFoundError();
-    return deleted;
+  if (!entry) {
+    throw notFoundError();
   }
 
-  const entry = await AcademicCalendar.findByIdAndUpdate(
+  /* =========================================
+     RETURN ENTRY
+  ========================================= */
+
+  return entry;
+}
+/* =========================================
+   UPDATE ACADEMIC CALENDAR
+========================================= */
+
+export async function updateAcademicCalendarService(
+  id,
+  updates = {},
+  userId
+) {
+  /* =========================================
+     VALIDATE IDS
+  ========================================= */
+
+  assertValidObjectId(
     id,
-    { status: "inactive" },
-    { new: true }
+    "Academic Calendar ID"
   );
-  if (!entry) throw notFoundError();
+
+  assertValidObjectId(
+    userId,
+    "updatedBy"
+  );
+
+  /* =========================================
+     FIND ENTRY
+  ========================================= */
+
+  const entry =
+    await AcademicCalendar.findById(id);
+
+  if (!entry) {
+    throw notFoundError();
+  }
+
+  /* =========================================
+     VALIDATE UPDATED VALUES
+  ========================================= */
+
+  const nextTarget =
+    updates.target ?? entry.target;
+
+  const nextClassId =
+    updates.classId !== undefined
+      ? updates.classId
+      : entry.classId;
+
+  const nextDivisionId =
+    updates.divisionId !== undefined
+      ? updates.divisionId
+      : entry.divisionId;
+
+  assertTargetScope(
+    nextTarget,
+    nextClassId,
+    nextDivisionId
+  );
+
+  const nextStart =
+    updates.startDate ??
+    entry.startDate;
+
+  const nextEnd =
+    updates.endDate ??
+    entry.endDate;
+
+  const { start, end } =
+    assertValidDateRange(
+      nextStart,
+      nextEnd
+    );
+
+  /* =========================================
+     APPLY UPDATES
+  ========================================= */
+
+  Object.assign(
+    entry,
+    updates
+  );
+
+  entry.startDate = start;
+  entry.endDate = end;
+
+  /* =========================================
+     KEEP TARGET CONSISTENT
+  ========================================= */
+
+  if (entry.target === "school") {
+    entry.classId = null;
+    entry.divisionId = null;
+  }
+
+  if (entry.target === "class") {
+    entry.divisionId = null;
+  }
+
+  // Division keeps both classId and divisionId
+
+  /* =========================================
+     AUDIT
+  ========================================= */
+
+  entry.updatedBy = userId;
+
+  /* =========================================
+     SAVE
+  ========================================= */
+
+  await entry.save();
+
   return entry;
 }
 
 /* =========================================
-   MONTH VIEW (handles repeatEveryYear entries)
+   DELETE ACADEMIC CALENDAR
 ========================================= */
-export async function getCalendarMonthService({ month, year, classId, divisionId }) {
-  if (!month || !year) {
-    const err = new Error("month and year are required");
-    err.status = 400;
+
+/* =========================================
+   DELETE ACADEMIC CALENDAR
+========================================= */
+
+export async function deleteAcademicCalendarService(
+  id,
+  userId,
+  options = {}
+) {
+  /* =========================================
+     VALIDATE IDS
+  ========================================= */
+
+  assertValidObjectId(
+    id,
+    "Academic Calendar ID"
+  );
+
+  assertValidObjectId(
+    userId,
+    "deletedBy"
+  );
+
+  /* =========================================
+     FIND ENTRY
+  ========================================= */
+
+  const entry = await AcademicCalendar.findById(id);
+
+  if (!entry) {
+    throw notFoundError();
+  }
+
+  if (options.hardDelete) {
+    await entry.deleteOne();
+    return { id, deleted: true };
+  }
+
+  /* =========================================
+     SOFT DELETE
+  ========================================= */
+
+  entry.status = "inactive";
+  entry.deletedBy = userId;
+  entry.updatedBy = userId;
+
+  await entry.save();
+
+  /* =========================================
+     RETURN ENTRY
+  ========================================= */
+
+  return entry;
+}
+
+/* =========================================
+   RESTORE SOFT DELETED ACADEMIC CALENDAR
+========================================= */
+
+export async function restoreAcademicCalendarService(id, userId) {
+  /* =========================================
+     VALIDATE IDS
+  ========================================= */
+
+  assertValidObjectId(id, "Academic Calendar ID");
+  assertValidObjectId(userId, "restoredBy");
+
+  /* =========================================
+     FIND ENTRY
+  ========================================= */
+
+  const entry = await AcademicCalendar.findById(id);
+
+  if (!entry) {
+    throw notFoundError("Academic calendar entry not found.");
+  }
+
+  if (entry.status === "active") {
+    return entry;
+  }
+
+  /* =========================================
+     DUPLICATE CHECK BEFORE RESTORE
+  ========================================= */
+
+  const existingActive = await AcademicCalendar.findOne({
+    _id: { $ne: id },
+    title: entry.title,
+    category: entry.category,
+    target: entry.target,
+    classId: entry.classId,
+    divisionId: entry.divisionId,
+    startDate: entry.startDate,
+    endDate: entry.endDate,
+    status: "active",
+  });
+
+  if (existingActive) {
+    const err = new Error(
+      "An active calendar entry with the same title, dates and scope already exists."
+    );
+    err.status = 409;
     throw err;
   }
 
-  const numMonth = Number(month);
-  if (numMonth < 1 || numMonth > 12) {
-  const err = new Error("Month must be between 1 and 12.");
-  err.status = 400;
-  throw err;
+  /* =========================================
+     RESTORE ENTRY
+  ========================================= */
+
+  entry.status = "active";
+  entry.restoredBy = userId;
+  entry.updatedBy = userId;
+  entry.deletedBy = null;
+
+  await entry.save();
+
+  return entry;
 }
-  const numYear = Number(year);
-  const monthStart = new Date(numYear, numMonth - 1, 1);
-  const monthEnd = new Date(numYear, numMonth, 0, 23, 59, 59, 999);
 
-  const scopeOr = buildScopeFilter({ classId, divisionId });
+/* =========================================
+   GET ACADEMIC REPORTS
+========================================= */
 
-  // Non-repeating entries that directly overlap this month
-  const directEvents = await AcademicCalendar.find({
-    status: "active",
-    $or: scopeOr,
-    repeatEveryYear: false,
-    startDate: { $lte: monthEnd },
-    endDate: { $gte: monthStart },
-  }).lean();
+export async function getAcademicReportsService({
+  startDate,
+  endDate,
+  classId,
+  divisionId,
+  academicYear,
+} = {}) {
+  const today = new Date();
+  const defaultStart = startDate
+    ? new Date(startDate)
+    : new Date(today.getFullYear(), 0, 1);
+  const defaultEnd = endDate
+    ? new Date(endDate)
+    : new Date(today.getFullYear(), 11, 31, 23, 59, 59);
 
-  // Repeating entries: re-anchor their month/day onto the requested year, then check overlap
-  const repeatingCandidates = await AcademicCalendar.find({
-    status: "active",
-    $or: scopeOr,
-    repeatEveryYear: true,
-  }).lean();
+  const [workingDaysData, holidays, upcomingEvents] = await Promise.all([
+    getWorkingDaysService({
+      startDate: defaultStart,
+      endDate: defaultEnd,
+      classId,
+      divisionId,
+    }),
 
-  const repeatingEvents = repeatingCandidates
-    .map((ev) => {
-      const projectedStartDate = new Date(ev.startDate);
-      projectedStartDate.setFullYear(numYear);
-      const projectedEndDate = new Date(ev.endDate);
-      projectedEndDate.setFullYear(numYear);
-      return { ...ev, projectedStartDate, projectedEndDate };
+    AcademicCalendar.find({
+      status: "active",
+      category: { $in: ["holiday", "vacation"] },
+      startDate: { $lte: defaultEnd },
+      endDate: { $gte: defaultStart },
+      ...(academicYear ? { academicYear } : {}),
     })
-    .filter((ev) => ev.projectedStartDate <= monthEnd && ev.projectedEndDate >= monthStart);
+      .sort({ startDate: 1 })
+      .lean(),
 
-  const allEvents = [...directEvents, ...repeatingEvents].sort((a, b) => {
-    const aDate = a.projectedStartDate || a.startDate;
-    const bDate = b.projectedStartDate || b.startDate;
-    return new Date(aDate) - new Date(bDate);
-  });
+    getUpcomingEventsService({ limit: 10, classId, divisionId }),
+  ]);
 
   return {
-    month: numMonth,
-    year: numYear,
-    totalEvents: allEvents.length,
-    events: allEvents,
+    period: {
+      startDate: defaultStart.toISOString().split("T")[0],
+      endDate: defaultEnd.toISOString().split("T")[0],
+    },
+    workingDays: workingDaysData,
+    holidayReport: {
+      totalHolidays: holidays.length,
+      holidays,
+    },
+    upcomingEvents,
   };
 }
 
 /* =========================================
-   WORKING DAYS (excludes weekends + holiday/vacation entries)
+   GET CALENDAR MONTH
 ========================================= */
+
+export async function getCalendarMonthService({
+  month,
+  year,
+  classId,
+  divisionId,
+} = {}) {
+  const now = new Date();
+  const targetYear = Number(year) || now.getFullYear();
+  const targetMonth = Number(month) ? Number(month) - 1 : now.getMonth();
+
+  const startDate = new Date(targetYear, targetMonth, 1);
+  const endDate = new Date(targetYear, targetMonth + 1, 0, 23, 59, 59, 999);
+
+  const scopeFilter = buildScopeFilter({ classId, divisionId });
+
+  const query = {
+    status: "active",
+    $or: scopeFilter,
+    startDate: { $lte: endDate },
+    endDate: { $gte: startDate },
+  };
+
+  const entries = await AcademicCalendar.find(query)
+    .sort({ startDate: 1 })
+    .populate("classId", "name")
+    .populate("divisionId", "name")
+    .lean();
+
+  return {
+    year: targetYear,
+    month: targetMonth + 1,
+    count: entries.length,
+    data: entries,
+  };
+}
+
+/* =========================================
+   GET WORKING DAYS
+========================================= */
+
 export async function getWorkingDaysService({
   startDate,
   endDate,
@@ -456,102 +921,284 @@ export async function getWorkingDaysService({
   divisionId,
   excludeWeekends = true,
 }) {
-  const { start, end } = assertValidDateRange(startDate, endDate);
-  const scopeOr = buildScopeFilter({ classId, divisionId });
+  /* =========================================
+     VALIDATE DATE RANGE
+  ========================================= */
 
-  const closures = await AcademicCalendar.find({
-    status: "active",
-    $or: scopeOr,
-    category: { $in: ["holiday", "vacation"] },
-    startDate: { $lte: end },
-    endDate: { $gte: start },
-  }).lean();
+  const { start, end } = assertValidDateRange(
+    startDate,
+    endDate
+  );
 
-  // Flatten every overlapping closure range into a set of individual closed dates
+  /* =========================================
+     BUILD TARGET FILTER
+  ========================================= */
+
+  const scopeFilter =
+    buildScopeFilter({
+      classId,
+      divisionId,
+    });
+
+  /* =========================================
+     GET HOLIDAYS & VACATIONS
+  ========================================= */
+
+  const closures =
+    await AcademicCalendar.find({
+      status: "active",
+
+      $or: scopeFilter,
+
+      category: {
+        $in: [
+          "holiday",
+          "vacation",
+        ],
+      },
+
+      startDate: {
+        $lte: end,
+      },
+
+      endDate: {
+        $gte: start,
+      },
+    }).lean();
+
+  /* =========================================
+     BUILD CLOSED DATE SET
+  ========================================= */
+
   const closedDates = new Set();
+
   for (const closure of closures) {
-    const rangeStart = new Date(Math.max(new Date(closure.startDate).getTime(), start.getTime()));
-    const rangeEnd = new Date(Math.min(new Date(closure.endDate).getTime(), end.getTime()));
-    for (let d = new Date(rangeStart); d <= rangeEnd; d.setDate(d.getDate() + 1)) {
-      closedDates.add(d.toISOString().slice(0, 10));
+    const rangeStart = new Date(
+      Math.max(
+        new Date(
+          closure.startDate
+        ).getTime(),
+        start.getTime()
+      )
+    );
+
+    const rangeEnd = new Date(
+      Math.min(
+        new Date(
+          closure.endDate
+        ).getTime(),
+        end.getTime()
+      )
+    );
+
+    for (
+      const current = new Date(
+        rangeStart
+      );
+      current <= rangeEnd;
+      current.setDate(
+        current.getDate() + 1
+      )
+    ) {
+      closedDates.add(
+        current
+          .toISOString()
+          .split("T")[0]
+      );
     }
   }
+
+  /* =========================================
+     CALCULATE DAYS
+  ========================================= */
 
   let totalDays = 0;
   let workingDays = 0;
   let weekends = 0;
   let holidays = 0;
 
-  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-    totalDays += 1;
-    const dateKey = d.toISOString().slice(0, 10);
-    const isWeekend = excludeWeekends && (d.getDay() === 0 || d.getDay() === 6);
-    const isClosed = closedDates.has(dateKey);
+  for (
+    const current = new Date(
+      start
+    );
+    current <= end;
+    current.setDate(
+      current.getDate() + 1
+    )
+  ) {
+    totalDays++;
 
-    if (isWeekend) weekends += 1;
-    else if (isClosed) holidays += 1;
-    else workingDays += 1;
+    const dateKey =
+      current
+        .toISOString()
+        .split("T")[0];
+
+    const isWeekend =
+      excludeWeekends &&
+      (
+        current.getDay() === 0 ||
+        current.getDay() === 6
+      );
+
+    const isHoliday =
+      closedDates.has(dateKey);
+
+    if (isWeekend) {
+      weekends++;
+    } else if (isHoliday) {
+      holidays++;
+    } else {
+      workingDays++;
+    }
   }
 
-  return { startDate: start, endDate: end, totalDays, workingDays, weekends, holidays };
+  /* =========================================
+     RETURN SUMMARY
+  ========================================= */
+
+  return {
+    startDate: start,
+    endDate: end,
+    totalDays,
+    workingDays,
+    weekends,
+    holidays,
+  };
 }
 
 /* =========================================
-   UPCOMING EVENTS (handles repeatEveryYear roll-forward)
+   GET UPCOMING EVENTS
 ========================================= */
+
 export async function getUpcomingEventsService({
   limit = 5,
   classId,
   divisionId,
   category,
 } = {}) {
+  /* =========================================
+     PREPARE FILTERS
+  ========================================= */
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const numericLimit = Number(limit) || 5;
-  const scopeOr = buildScopeFilter({ classId, divisionId });
 
-  const baseFilter = { status: "active", $or: scopeOr };
-  if (category) baseFilter.category = String(category).toLowerCase();
+  const numericLimit = Math.max(
+    Number(limit) || 5,
+    1
+  );
 
-  // Non-repeating events that haven't ended yet
-  const direct = await AcademicCalendar.find({
-    ...baseFilter,
-    repeatEveryYear: false,
-    endDate: { $gte: today },
-  })
-    .sort({ startDate: 1 })
-    .limit(numericLimit * 2)
-    .lean();
+  const scopeFilter = buildScopeFilter({
+    classId,
+    divisionId,
+  });
 
-  // Repeating events: project onto this year, roll to next year if this year's date already passed
-  const repeatingCandidates = await AcademicCalendar.find({
-    ...baseFilter,
-    repeatEveryYear: true,
-  }).lean();
+  const query = {
+    status: "active",
+    $or: scopeFilter,
+  };
 
-  const currentYear = today.getFullYear();
-  const repeating = repeatingCandidates
-    .map((ev) => {
-      let projectedStartDate = new Date(ev.startDate);
-      projectedStartDate.setFullYear(currentYear);
-      let projectedEndDate = new Date(ev.endDate);
-      projectedEndDate.setFullYear(currentYear);
+  if (category) {
+    query.category = String(category).toLowerCase();
+  }
 
-      if (projectedEndDate < today) {
-        projectedStartDate.setFullYear(currentYear + 1);
-        projectedEndDate.setFullYear(currentYear + 1);
-      }
-      return { ...ev, projectedStartDate, projectedEndDate };
+  /* =========================================
+     NON-REPEATING EVENTS
+  ========================================= */
+
+  const directEvents =
+    await AcademicCalendar.find({
+      ...query,
+      repeatEveryYear: false,
+      endDate: {
+        $gte: today,
+      },
     })
-    .filter((ev) => ev.projectedEndDate >= today);
+      .sort({
+        startDate: 1,
+      })
+      .limit(numericLimit * 2)
+      .lean();
 
-  const merged = [...direct, ...repeating]
+  /* =========================================
+     REPEATING EVENTS
+  ========================================= */
+
+  const repeatingEvents =
+    await AcademicCalendar.find({
+      ...query,
+      repeatEveryYear: true,
+    }).lean();
+
+  const currentYear =
+    today.getFullYear();
+
+  const projectedEvents =
+    repeatingEvents
+      .map((event) => {
+        const projectedStart =
+          new Date(event.startDate);
+
+        const projectedEnd =
+          new Date(event.endDate);
+
+        projectedStart.setFullYear(
+          currentYear
+        );
+
+        projectedEnd.setFullYear(
+          currentYear
+        );
+
+        if (
+          projectedEnd < today
+        ) {
+          projectedStart.setFullYear(
+            currentYear + 1
+          );
+
+          projectedEnd.setFullYear(
+            currentYear + 1
+          );
+        }
+
+        return {
+          ...event,
+          projectedStartDate:
+            projectedStart,
+          projectedEndDate:
+            projectedEnd,
+        };
+      })
+      .filter(
+        (event) =>
+          event.projectedEndDate >=
+          today
+      );
+
+  /* =========================================
+     MERGE EVENTS
+  ========================================= */
+
+  const events = [
+    ...directEvents,
+    ...projectedEvents,
+  ]
     .sort((a, b) => {
-      const aDate = a.projectedStartDate || a.startDate;
-      const bDate = b.projectedStartDate || b.startDate;
-      return new Date(aDate) - new Date(bDate);
+      const first =
+        a.projectedStartDate ??
+        a.startDate;
+
+      const second =
+        b.projectedStartDate ??
+        b.startDate;
+
+      return (
+        new Date(first) -
+        new Date(second)
+      );
     })
     .slice(0, numericLimit);
 
-  return merged;
+  return events;
 }

@@ -8,6 +8,8 @@ import attendanceRoutes from "./attendance.routes.js";
 import dashboardRoutes from "./dashboard.routes.js";
 import exportRoutes from "./export.routes.js";
 import importRoutes from "./import.routes.js";
+import reportsRoutes from "./reports.routes.js";
+import academicCalendarRoutes from "./academicCalendar.routes.js";
 
 const router = express.Router();
 
@@ -20,6 +22,8 @@ router.use("/students", studentRoutes);
 router.use("/divisions", divisionRoutes);
 router.use("/export", exportRoutes);
 router.use("/import", importRoutes);
+router.use("/reports", reportsRoutes);
+router.use("/academic-calendar", academicCalendarRoutes);
 
 export default router;
 

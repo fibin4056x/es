@@ -16,6 +16,9 @@ export const importStudentsController = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Please upload a valid CSV or Excel (.xlsx, .xls) file");
   }
 
+  const classId = req.query.classId || req.body.classId;
+  const divisionId = req.query.divisionId || req.body.divisionId;
+
   // Parse uploaded file buffer to structured array of rows
   const parsedRecords = parseImportFile(req.file.buffer);
 
@@ -23,8 +26,8 @@ export const importStudentsController = asyncHandler(async (req, res) => {
     throw new ApiError(400, "The uploaded file is empty or formatted incorrectly");
   }
 
-  // Execute bulk import service
-  const summary = await importStudentsService(parsedRecords);
+  // Execute bulk import service with target class and division options
+  const summary = await importStudentsService(parsedRecords, { classId, divisionId });
 
   return res
     .status(200)

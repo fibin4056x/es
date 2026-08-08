@@ -19,7 +19,7 @@ export const exportAllStudentsController = asyncHandler(async (req, res) => {
   }
 
   const exportResult = await exportAllStudentsService();
-  const { buffer, filename, contentType } = generateExportBuffer({
+  const { buffer, filename, contentType } = await generateExportBuffer({
     metadata: exportResult.metadata,
     data: exportResult.data,
     format,
@@ -46,7 +46,7 @@ export const exportStudentsByClassController = asyncHandler(async (req, res) => 
   }
 
   const exportResult = await exportStudentsByClassService(classId);
-  const { buffer, filename, contentType } = generateExportBuffer({
+  const { buffer, filename, contentType } = await generateExportBuffer({
     metadata: exportResult.metadata,
     data: exportResult.data,
     format,
@@ -74,7 +74,7 @@ export const exportStudentsByDivisionController = asyncHandler(
     }
 
     const exportResult = await exportStudentsByDivisionService(divisionId);
-    const { buffer, filename, contentType } = generateExportBuffer({
+    const { buffer, filename, contentType } = await generateExportBuffer({
       metadata: exportResult.metadata,
       data: exportResult.data,
       format,
@@ -103,7 +103,7 @@ export const exportStudentsByTeacherController = asyncHandler(
     }
 
     const exportResult = await exportStudentsByTeacherService(teacherId);
-    const { buffer, filename, contentType } = generateExportBuffer({
+    const { buffer, filename, contentType } = await generateExportBuffer({
       metadata: exportResult.metadata,
       data: exportResult.data,
       format,
