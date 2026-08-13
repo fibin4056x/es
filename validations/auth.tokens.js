@@ -5,18 +5,21 @@ import { ENV } from "../config/env.js";
 
 export const TOKEN_TYPES = Object.freeze({
   ACCESS: "access",
+  REFRESH: "refresh",
   SETUP: "setup",
   RESET: "reset",
 });
 
 const TOKEN_EXPIRATION = Object.freeze({
   ACCESS: ENV.JWT_ACCESS_EXPIRES_IN,
+  REFRESH: ENV.JWT_REFRESH_EXPIRES_IN,
   SETUP: ENV.JWT_SETUP_EXPIRES_IN,
   RESET: ENV.JWT_RESET_EXPIRES_IN,
 });
 
 const TOKEN_SECRETS = Object.freeze({
   ACCESS: ENV.JWT_ACCESS_SECRET,
+  REFRESH: ENV.JWT_REFRESH_SECRET,
   SETUP: ENV.JWT_SETUP_SECRET,
   RESET: ENV.JWT_RESET_SECRET,
 });
@@ -110,6 +113,19 @@ export const generateAccessToken = (user) => {
     type: TOKEN_TYPES.ACCESS,
     expiresIn: TOKEN_EXPIRATION.ACCESS,
     secret: TOKEN_SECRETS.ACCESS,
+  });
+};
+
+// ============================================================
+// REFRESH TOKEN
+// ============================================================
+
+export const generateRefreshToken = (user) => {
+  return signToken({
+    user,
+    type: TOKEN_TYPES.REFRESH,
+    expiresIn: TOKEN_EXPIRATION.REFRESH,
+    secret: TOKEN_SECRETS.REFRESH,
   });
 };
 
@@ -237,6 +253,18 @@ export const verifyAccessToken = (token) => {
     token,
     TOKEN_TYPES.ACCESS,
     TOKEN_SECRETS.ACCESS
+  );
+};
+
+// ============================================================
+// VERIFY REFRESH TOKEN
+// ============================================================
+
+export const verifyRefreshToken = (token) => {
+  return verifyToken(
+    token,
+    TOKEN_TYPES.REFRESH,
+    TOKEN_SECRETS.REFRESH
   );
 };
 

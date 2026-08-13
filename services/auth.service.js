@@ -1,18 +1,23 @@
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import mongoose from "mongoose";
 
 import User from "../models/user.model.js";
+import RefreshSession from "../models/refreshSession.model.js";
 import ApiError from "../utils/ApiError.js";
+import { ENV } from "../config/env.js";
 
-import { ROLES } from "../constants/role.js";
+import { ROLES } from "../models/constants/role.js";
 
 import {
   generateAccessToken,
+  generateRefreshToken,
   generateSetupToken,
   generateResetToken,
+  verifyRefreshToken,
   verifySetupToken,
   verifyResetToken,
-} from "../utils/auth.tokens.js";
+} from "../validations/auth.tokens.js";
 
 import {
   generateAndSendOtp,
@@ -151,6 +156,10 @@ const ensureActiveUser = (user) => {
   }
 };
 
+const hashToken = (token) => {
+  return crypto.createHash("sha256").update(token).digest("hex");
+};
+
 // ============================================================
 // LOGIN
 // ============================================================
@@ -158,6 +167,8 @@ const ensureActiveUser = (user) => {
 export const loginService = async ({
   email,
   password,
+  ipAddress = "",
+  userAgent = "",
 }) => {
   const normalizedEmail = normalizeEmail(email);
 
@@ -237,16 +248,137 @@ export const loginService = async ({
   await user.save();
 
   // ----------------------------------------------------------
-  // ACCESS TOKEN
+  // ACCESS & REFRESH TOKENS
   // ----------------------------------------------------------
 
   const accessToken = generateAccessToken(user);
+  const refreshToken = generateRefreshToken(user);
+  const tokenHash = hashToken(refreshToken);
+
+  await RefreshSession.create({
+    userId: user._id,
+    tokenHash,
+    ipAddress,
+    userAgent,
+    expiresAt: new Date(Date.now() + ENV.REFRESH_COOKIE_MAX_AGE),
+  });
 
   return {
     message: "Login successful.",
     token: accessToken,
+    refreshToken,
     user: buildUser(user),
   };
+};
+
+// ============================================================
+// REFRESH ACCESS TOKEN
+// ============================================================
+
+export const refreshAccessTokenService = async ({
+  refreshToken,
+  ipAddress = "",
+  userAgent = "",
+}) => {
+  if (!refreshToken || typeof refreshToken !== "string") {
+    throw new ApiError(401, "Refresh token is missing or invalid.");
+  }
+
+  let decoded;
+
+  try {
+    decoded = verifyRefreshToken(refreshToken);
+  } catch (error) {
+    throw new ApiError(401, "Invalid or expired refresh token.");
+  }
+
+  const tokenHash = hashToken(refreshToken);
+  const session = await RefreshSession.findOne({ tokenHash });
+
+  if (!session) {
+    throw new ApiError(401, "Refresh session not found.");
+  }
+
+  // Token reuse detection: if revoked session is used, invalidate ALL user sessions
+  if (session.isRevoked) {
+    await RefreshSession.updateMany(
+      { userId: session.userId, isRevoked: false },
+      { $set: { isRevoked: true, revokedAt: new Date() } }
+    );
+
+    throw new ApiError(
+      401,
+      "Refresh token has been revoked due to security policy."
+    );
+  }
+
+  if (session.expiresAt <= new Date()) {
+    throw new ApiError(401, "Refresh session has expired.");
+  }
+
+  const user = await User.findOne({
+    _id: session.userId,
+    isDeleted: false,
+  });
+
+  ensureActiveUser(user);
+
+  // Revoke old session and issue new token pair
+  session.isRevoked = true;
+  session.revokedAt = new Date();
+
+  const newAccessToken = generateAccessToken(user);
+  const newRefreshToken = generateRefreshToken(user);
+  const newTokenHash = hashToken(newRefreshToken);
+
+  session.replacedByTokenHash = newTokenHash;
+  await session.save();
+
+  await RefreshSession.create({
+    userId: user._id,
+    tokenHash: newTokenHash,
+    ipAddress,
+    userAgent,
+    expiresAt: new Date(Date.now() + ENV.REFRESH_COOKIE_MAX_AGE),
+  });
+
+  return {
+    token: newAccessToken,
+    refreshToken: newRefreshToken,
+    user: buildUser(user),
+  };
+};
+
+// ============================================================
+// LOGOUT
+// ============================================================
+
+export const logoutService = async ({ refreshToken, userId }) => {
+  if (refreshToken) {
+    const tokenHash = hashToken(refreshToken);
+
+    await RefreshSession.updateOne(
+      { tokenHash },
+      {
+        $set: {
+          isRevoked: true,
+          revokedAt: new Date(),
+        },
+      }
+    );
+  } else if (userId) {
+    await RefreshSession.updateMany(
+      { userId, isRevoked: false },
+      {
+        $set: {
+          isRevoked: true,
+          revokedAt: new Date(),
+        },
+      }
+    );
+  }
+
+  return { success: true };
 };
 
 // ============================================================
@@ -816,7 +948,7 @@ export const updateProfileService = async (
 
     user.avatar =
       typeof data.avatar === "string" &&
-      data.avatar.trim()
+        data.avatar.trim()
         ? data.avatar.trim()
         : null;
   }

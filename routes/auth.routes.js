@@ -2,6 +2,7 @@ import express from "express";
 
 import {
   login,
+  refreshAccessToken,
   logout,
   getMe,
   updateProfile,
@@ -31,6 +32,11 @@ router.post(
   "/login",
   authRateLimiter,
   login
+);
+
+router.post(
+  "/refresh",
+  refreshAccessToken
 );
 
 router.post(

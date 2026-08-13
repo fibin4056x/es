@@ -1,11 +1,30 @@
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
+import cookieParser from "cookie-parser";
+import mongoSanitize from "express-mongo-sanitize";
 
 import routes from "./routes/index.js";
 import { errorHandler } from "./middleware/error.middleware.js";
 import { ENV } from "./config/env.js";
 
 const app = express();
+
+/* =========================
+   TRUST PROXY
+========================= */
+
+if (ENV.TRUST_PROXY) {
+  app.set("trust proxy", 1);
+}
+
+/* =========================
+   SECURITY HEADERS & SANITIZATION
+========================= */
+
+app.use(helmet());
+app.use(cookieParser());
+app.use(mongoSanitize());
 
 /* =========================
    CORS

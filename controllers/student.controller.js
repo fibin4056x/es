@@ -7,170 +7,147 @@ import {
   getStudentsByDivisionService,
   getStudentsByTeacherService,
 } from "../services/student.service.js";
+import asyncHandler from "../utils/asyncHandler.js";
+import ApiResponse from "../utils/apiResponse.js";
+import ApiError from "../utils/ApiError.js";
 
 /* =========================================
    CREATE STUDENT
 ========================================= */
 
-export const createStudentController = async (req, res) => {
-  console.log("CREATE STUDENT BODY:", req.body);
+export const createStudentController = asyncHandler(async (req, res) => {
+  const newStudent = await createStudentService(req.body);
 
-  try {
-    const newStudent = await createStudentService(req.body);
-
-    res.status(201).json({
-      success: true,
-      message: "Student created successfully",
-      data: newStudent,
-    });
-  } catch (error) {
-    console.log("CREATE STUDENT ERROR:", error.message);
-
-    res.status(400).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
+  return res.status(201).json(
+    new ApiResponse(
+      201,
+      newStudent,
+      "Student created successfully"
+    )
+  );
+});
 
 /* =========================================
    GET ALL STUDENTS
 ========================================= */
 
-export const getAllStudentsController = async (req, res) => {
-  try {
-    let result;
-
-    if (req.user.role === "teacher") {
-      const students = await getStudentsByTeacherService(req.user.id);
-      return res.status(200).json({
-        success: true,
-        data: students,
-      });
-    }
-
-    result = await getAllStudentsService(req.query);
-
-    return res.status(200).json({
-      success: true,
-      data: result.students,
-      pagination: result.pagination,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+export const getAllStudentsController = asyncHandler(async (req, res) => {
+  if (req.user.role === "teacher") {
+    const students = await getStudentsByTeacherService(req.user.id);
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        students,
+        "Students fetched successfully"
+      )
+    );
   }
-};
+
+  const result = await getAllStudentsService(req.query);
+
+  return res.status(200).json({
+    success: true,
+    data: result.students,
+    pagination: result.pagination,
+  });
+});
 
 /* =========================================
    GET STUDENT BY ID
 ========================================= */
 
-export const getStudentByIdController = async (req, res) => {
-  try {
-    const student = await getStudentByIdService(req.params.id);
-
-    res.status(200).json({
-      success: true,
-      data: student,
-    });
-  } catch (error) {
-    res.status(404).json({
-      success: false,
-      message: error.message,
-    });
+export const getStudentByIdController = asyncHandler(async (req, res) => {
+  if (!req.params.id) {
+    throw new ApiError(400, "Student ID is required");
   }
-};
+
+  const student = await getStudentByIdService(req.params.id);
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      student,
+      "Student fetched successfully"
+    )
+  );
+});
 
 /* =========================================
    UPDATE STUDENT
 ========================================= */
 
-export const updateStudentController = async (req, res) => {
-  try {
-    const updatedStudent = await updateStudentService(
-      req.params.id,
-      req.body,
-      req.user
-    );
-
-    res.status(200).json({
-      success: true,
-      message: "Student updated successfully",
-      data: updatedStudent,
-    });
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error.message,
-    });
+export const updateStudentController = asyncHandler(async (req, res) => {
+  if (!req.params.id) {
+    throw new ApiError(400, "Student ID is required");
   }
-};
+
+  const updatedStudent = await updateStudentService(
+    req.params.id,
+    req.body,
+    req.user
+  );
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      updatedStudent,
+      "Student updated successfully"
+    )
+  );
+});
 
 /* =========================================
    DELETE STUDENT
 ========================================= */
 
-export const deleteStudentController = async (req, res) => {
-  try {
-    await deleteStudentService(req.params.id);
-
-    res.status(200).json({
-      success: true,
-      message: "Student deleted successfully",
-    });
-  } catch (error) {
-    res.status(404).json({
-      success: false,
-      message: error.message,
-    });
+export const deleteStudentController = asyncHandler(async (req, res) => {
+  if (!req.params.id) {
+    throw new ApiError(400, "Student ID is required");
   }
-};
+
+  await deleteStudentService(req.params.id);
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      null,
+      "Student deleted successfully"
+    )
+  );
+});
 
 /* =========================================
    GET STUDENTS BY TEACHER
 ========================================= */
 
-export const getStudentsByTeacherController = async (req, res) => {
-  try {
-    const result = await getStudentsByTeacherService(req.user.id, req.query);
+export const getStudentsByTeacherController = asyncHandler(async (req, res) => {
+  const result = await getStudentsByTeacherService(req.user.id, req.query);
 
-    res.status(200).json({
-      success: true,
-      data: result.students || result,
-      pagination: result.pagination,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
+  return res.status(200).json({
+    success: true,
+    data: result.students || result,
+    pagination: result.pagination,
+  });
+});
 
 /* =========================================
    GET STUDENTS BY DIVISION
 ========================================= */
 
-export const getStudentsByDivisionController = async (req, res) => {
-  try {
-    const result = await getStudentsByDivisionService(
-      req.params.divisionId,
-      req.user,
-      req.query
-    );
-
-    res.status(200).json({
-      success: true,
-      data: result.students || result,
-      pagination: result.pagination,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+export const getStudentsByDivisionController = asyncHandler(async (req, res) => {
+  if (!req.params.divisionId) {
+    throw new ApiError(400, "Division ID is required");
   }
-};
+
+  const result = await getStudentsByDivisionService(
+    req.params.divisionId,
+    req.user,
+    req.query
+  );
+
+  return res.status(200).json({
+    success: true,
+    data: result.students || result,
+    pagination: result.pagination,
+  });
+});

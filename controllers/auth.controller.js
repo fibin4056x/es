@@ -1,6 +1,7 @@
 import asyncHandler from "../utils/asyncHandler.js";
 import ApiResponse from "../utils/apiResponse.js";
 import ApiError from "../utils/ApiError.js";
+import { ENV } from "../config/env.js";
 
 import {
   loginService,
@@ -17,6 +18,15 @@ import {
   resetPasswordService,
 } from "../services/auth.service.js";
 
+const getCookieOptions = () => ({
+  httpOnly: ENV.COOKIE_HTTP_ONLY,
+  secure: ENV.COOKIE_SECURE,
+  sameSite: ENV.COOKIE_SAME_SITE,
+  domain: ENV.COOKIE_DOMAIN || undefined,
+  maxAge: ENV.REFRESH_COOKIE_MAX_AGE,
+  path: "/api/auth",
+});
+
 // ============================================================
 // LOGIN
 // POST /api/auth/login
@@ -29,8 +39,11 @@ export const login = asyncHandler(async (req, res) => {
     userAgent: req.get("user-agent") || "",
   });
 
-  // Refresh token is intentionally NOT returned in JSON.
-  // It should be stored in a secure HttpOnly cookie by the service.
+  if (data.refreshToken) {
+    res.cookie("refreshToken", data.refreshToken, getCookieOptions());
+    delete data.refreshToken;
+  }
+
   return res.status(200).json(
     new ApiResponse(
       200,
@@ -62,6 +75,11 @@ export const refreshAccessToken = asyncHandler(
       userAgent: req.get("user-agent") || "",
     });
 
+    if (data.refreshToken) {
+      res.cookie("refreshToken", data.refreshToken, getCookieOptions());
+      delete data.refreshToken;
+    }
+
     return res.status(200).json(
       new ApiResponse(
         200,
@@ -89,17 +107,9 @@ export const logout = asyncHandler(
       });
     }
 
-    // Always clear the cookie.
-    // Logout should remain successful even if the
-    // refresh token is already expired/revoked.
     res.clearCookie("refreshToken", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite:
-        process.env.NODE_ENV === "production"
-          ? "none"
-          : "lax",
-      path: "/api/auth",
+      ...getCookieOptions(),
+      maxAge: undefined,
     });
 
     return res.status(200).json(
