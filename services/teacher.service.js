@@ -1,6 +1,7 @@
 import User from "../models/user.model.js";
 import DivisionModel from "../models/division.model.js";
 import bcrypt from "bcryptjs";
+import ApiError from "../utils/ApiError.js";
 
 import { sendTeacherAccountCreatedEmail } from "./email.service.js";
 
@@ -8,7 +9,7 @@ export const createTeacherService = async (teacherData) => {
   const email = teacherData.email?.trim().toLowerCase();
   const existingTeacher = await User.findOne({ email });
   if (existingTeacher) {
-    throw new Error("Teacher with this email already exists");
+    throw new ApiError(400, "Teacher with this email already exists");
   }
 
   const teacher = await User.create({
@@ -69,40 +70,40 @@ export const getAllTeacherService = async (options = {}) => {
   };
 };
 
-export const getTeacherByIdService =async (teacherId) => {
-    const teacher =await User.findOne({
-        _id:teacherId,
-        role:"teacher",
-    }).select("-password");
+export const getTeacherByIdService = async (teacherId) => {
+  const teacher = await User.findOne({
+    _id: teacherId,
+    role: "teacher",
+  }).select("-password");
 
-    if(!teacher){
-        throw new Error("Teacher not found");
-    }
+  if (!teacher) {
+    throw new ApiError(404, "Teacher not found");
+  }
 
-    return teacher;
-}
+  return teacher;
+};
 
 export const updateTeacherStatusService = async (
-    teacherId,
-    status
+  teacherId,
+  status
 ) => {
-    const teacher = await User.findOneAndUpdate(
-        {
-            _id:teacherId,
-            role:"teacher",
-        },
-        {
-            status,
-        },
-        {new :true,}
-    ).select("-password");
+  const teacher = await User.findOneAndUpdate(
+    {
+      _id: teacherId,
+      role: "teacher",
+    },
+    {
+      status,
+    },
+    { new: true }
+  ).select("-password");
 
-    if(!teacher){
-        throw new Error ("Teacher not found");
-    }
+  if (!teacher) {
+    throw new ApiError(404, "Teacher not found");
+  }
 
-    return teacher;
-}
+  return teacher;
+};
 
 export const updateTeacherService = async (teacherId, teacherData) => {
   if (teacherData.password) {
@@ -124,45 +125,42 @@ export const updateTeacherService = async (teacherId, teacherData) => {
   ).select("-password");
 
   if (!teacher) {
-    throw new Error("Teacher not found");
+    throw new ApiError(404, "Teacher not found");
   }
 
   return teacher;
 };
 
-export const deleteTeacherService = async (
-  teacherId
-) => {
-  //check if teacher exists 
-
+export const deleteTeacherService = async (teacherId) => {
+  // Check if teacher exists 
   const teacher = await User.findOne({
-    _id:teacherId,
+    _id: teacherId,
     role: "teacher",
   });
 
-  if(!teacher){
-    throw new  Error(" Teacher  not found")
+  if (!teacher) {
+    throw new ApiError(404, "Teacher not found");
   }
 
-  //Check if teacher is assigned to any division
-
-  const assignedDivision =await DivisionModel.exists({
+  // Check if teacher is assigned to any division
+  const assignedDivision = await DivisionModel.exists({
     assignedTeacher: teacherId,
+  });
 
-  })
-  if(assignedDivision){
-    throw new ErrorEvent(
+  if (assignedDivision) {
+    throw new ApiError(
+      400,
       "Cannot delete teacher because the teacher is assigned to a division."
     );
   }
 
   // Safe to delete
-   await User.findByIdAndDelete({
-    _id:teacherId,
-    role:"teacher",
-   });
+  await User.findOneAndDelete({
+    _id: teacherId,
+    role: "teacher",
+  });
 
-   return {
-    message : "Teacher delete successfully"
-   };
+  return {
+    message: "Teacher deleted successfully",
+  };
 };

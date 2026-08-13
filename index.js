@@ -20,8 +20,8 @@ const startServer = async () => {
     console.log("📧 Email service ready");
 
     // Start Express server
-    server = app.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
+    server = app.listen(PORT, "0.0.0.0", () => {
+      console.log(`🚀 Server running on port ${PORT} (0.0.0.0)`);
     });
   } catch (error) {
     console.error("❌ Server startup failed:");

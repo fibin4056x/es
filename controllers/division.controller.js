@@ -6,138 +6,124 @@ import {
   deleteDivisionService,
   getTeacherDivisionsService,
 } from "../services/division.service.js";
+import asyncHandler from "../utils/asyncHandler.js";
+import ApiResponse from "../utils/apiResponse.js";
+import ApiError from "../utils/ApiError.js";
 
 /* =========================================
    CREATE DIVISION
 ========================================= */
 
-export const createDivisionController = async (req, res) => {
-  try {
-    const newDivision = await createDivisionService(req.body);
+export const createDivisionController = asyncHandler(async (req, res) => {
+  const newDivision = await createDivisionService(req.body);
 
-    res.status(201).json({
-      success: true,
-      message: "Division created successfully",
-      data: newDivision,
-    });
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
+  return res.status(201).json(
+    new ApiResponse(
+      201,
+      newDivision,
+      "Division created successfully"
+    )
+  );
+});
 
 /* =========================================
    GET ALL DIVISIONS
 ========================================= */
 
-export const getAllDivisionsController = async (req, res) => {
-  try {
-    let divisions;
-    let pagination;
+export const getAllDivisionsController = asyncHandler(async (req, res) => {
+  let divisions;
+  let pagination;
 
-    if (req.user.role === "teacher") {
-      divisions = await getTeacherDivisionsService(req.user.id);
-    } else {
-      const result = await getAllDivisionsService(req.query);
-      divisions = result.divisions;
-      pagination = result.pagination;
-    }
-
-    res.status(200).json({
-      success: true,
-      data: divisions,
-      pagination,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+  if (req.user.role === "teacher") {
+    divisions = await getTeacherDivisionsService(req.user.id);
+  } else {
+    const result = await getAllDivisionsService(req.query);
+    divisions = result.divisions;
+    pagination = result.pagination;
   }
-};
+
+  return res.status(200).json({
+    success: true,
+    data: divisions,
+    pagination,
+  });
+});
 
 /* =========================================
    GET DIVISION BY ID
 ========================================= */
 
-export const getDivisionByIdController = async (req, res) => {
-  try {
-    const division = await getDivisionByIdService(req.params.id);
-
-    res.status(200).json({
-      success: true,
-      data: division,
-    });
-  } catch (error) {
-    res.status(404).json({
-      success: false,
-      message: error.message,
-    });
+export const getDivisionByIdController = asyncHandler(async (req, res) => {
+  if (!req.params.id) {
+    throw new ApiError(400, "Division ID is required");
   }
-};
+
+  const division = await getDivisionByIdService(req.params.id);
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      division,
+      "Division fetched successfully"
+    )
+  );
+});
 
 /* =========================================
    UPDATE DIVISION
 ========================================= */
 
-export const updateDivisionController = async (req, res) => {
-  try {
-    const updatedDivision = await updateDivisionService(
-      req.params.id,
-      req.body
-    );
-
-    res.status(200).json({
-      success: true,
-      message: "Division updated successfully",
-      data: updatedDivision,
-    });
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error.message,
-    });
+export const updateDivisionController = asyncHandler(async (req, res) => {
+  if (!req.params.id) {
+    throw new ApiError(400, "Division ID is required");
   }
-};
+
+  const updatedDivision = await updateDivisionService(
+    req.params.id,
+    req.body
+  );
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      updatedDivision,
+      "Division updated successfully"
+    )
+  );
+});
 
 /* =========================================
    DELETE DIVISION
 ========================================= */
 
-export const deleteDivisionController = async (req, res) => {
-  try {
-    await deleteDivisionService(req.params.id);
-
-    res.status(200).json({
-      success: true,
-      message: "Division deleted successfully",
-    });
-  } catch (error) {
-    res.status(404).json({
-      success: false,
-      message: error.message,
-    });
+export const deleteDivisionController = asyncHandler(async (req, res) => {
+  if (!req.params.id) {
+    throw new ApiError(400, "Division ID is required");
   }
-};
+
+  await deleteDivisionService(req.params.id);
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      null,
+      "Division deleted successfully"
+    )
+  );
+});
 
 /* =========================================
    GET MY DIVISIONS
 ========================================= */
 
-export const getMyDivisionsController = async (req, res) => {
-  try {
-    const divisions = await getTeacherDivisionsService(req.user.id);
+export const getMyDivisionsController = asyncHandler(async (req, res) => {
+  const divisions = await getTeacherDivisionsService(req.user.id);
 
-    res.status(200).json({
-      success: true,
-      data: divisions,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      divisions,
+      "Teacher divisions fetched successfully"
+    )
+  );
+});

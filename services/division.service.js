@@ -1,6 +1,6 @@
-import DivisionModel
-  from "../models/division.model.js";
+import DivisionModel from "../models/division.model.js";
 import StudentModel from "../models/student.model.js";
+import ApiError from "../utils/ApiError.js";
 
 
 /* =========================================
@@ -157,34 +157,31 @@ export const updateDivisionService =
    DELETE DIVISION
 ========================================= */
 
-export const deleteDivisionService =
-  async (divisionId) => {
-   const division = await DivisionModel.findById(divisionId);
+export const deleteDivisionService = async (divisionId) => {
+  const division = await DivisionModel.findById(divisionId);
 
-   if(!divisionId){
-    throw new Error("Division  not found ")
-   }
+  if (!division) {
+    throw new ApiError(404, "Division not found");
+  }
 
-   //check  whether student  are assigned to it.
+  // Check whether students are assigned to it.
+  const hasStudents = await StudentModel.exists({
+    divisionId,
+  });
 
-   const hasStudents = await StudentModel.exists({
-    divisionId,})
-   
+  if (hasStudents) {
+    throw new ApiError(
+      400,
+      "Cannot delete division because students are assigned to it."
+    );
+  }
 
-   if(hasStudents){
-    throw new Error(
-      "cannot delete  divisionId because students are assigned to it."
-    
-    )
+  await DivisionModel.findByIdAndDelete(divisionId);
 
-   }
-
-   await DivisionModel.findByIdAndDelete(divisionId);
-
-   return {
-    message :" Division deleted successfully"
-   }
+  return {
+    message: "Division deleted successfully",
   };
+};
   /* =========================================
    GET DIVISIONS BY TEACHER
 ========================================= */

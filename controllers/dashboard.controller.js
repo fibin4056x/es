@@ -1,27 +1,69 @@
 import asyncHandler from "../utils/asyncHandler.js";
-import { dashboardStatsService, dashboardPreviewStatsService } from "../services/dashboard.service.js";
 import ApiResponse from "../utils/apiResponse.js";
 
-export const getDashboardStats = asyncHandler(async (req, res) => {
-  const data = await dashboardStatsService();
+import {
+  dashboardStatsService,
+  dashboardReportsService,
+  dashboardPreviewStatsService,
+} from "../services/dashboard.service.js";
 
-  res.status(200).json(
-    new ApiResponse(200, data, "Dashboard stats fetched successfully")
-  );
-});
+/*
+|--------------------------------------------------------------------------
+| DASHBOARD STATS
+|--------------------------------------------------------------------------
+*/
 
-export const getDashboardReports = asyncHandler(async (req, res) => {
-  const data = await dashboardStatsService();
+export const getDashboardStats = asyncHandler(
+  async (req, res) => {
+    const data = await dashboardStatsService();
 
-  res.status(200).json(
-    new ApiResponse(200, data, "Dashboard reports fetched successfully")
-  );
-});
+    res.status(200).json(
+      new ApiResponse(
+        200,
+        data,
+        "Dashboard stats fetched successfully"
+      )
+    );
+  }
+);
 
-export const getDashboardPreviewStats = asyncHandler(async (req, res) => {
-  const data = await dashboardPreviewStatsService();
+/*
+|--------------------------------------------------------------------------
+| DASHBOARD REPORTS
+|--------------------------------------------------------------------------
+*/
 
-  res.status(200).json(
-    new ApiResponse(200, data)
-  );
-});
+export const getDashboardReports = asyncHandler(
+  async (req, res) => {
+    const data = await dashboardReportsService();
+
+    res.status(200).json(
+      new ApiResponse(
+        200,
+        data,
+        "Dashboard reports fetched successfully"
+      )
+    );
+  }
+);
+
+/*
+|--------------------------------------------------------------------------
+| PUBLIC DASHBOARD PREVIEW
+|--------------------------------------------------------------------------
+*/
+
+export const getDashboardPreviewStats = asyncHandler(
+  async (req, res) => {
+    const data =
+      await dashboardPreviewStatsService();
+
+    res.status(200).json(
+      new ApiResponse(
+        200,
+        data,
+        "Dashboard preview fetched successfully"
+      )
+    );
+  }
+);

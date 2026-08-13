@@ -30,6 +30,11 @@ const router = express.Router();
 
 router.post(
   "/login",
+  (req, res, next) => {
+    console.log("🔥 LOGIN ROUTE HIT");
+    console.log("BODY:", req.body);
+    next();
+  },
   authRateLimiter,
   login
 );

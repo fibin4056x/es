@@ -108,17 +108,12 @@ export const createStudentService =
       );
 
     } catch (error) {
-
-  console.log("========== DUPLICATE ERROR ==========");
-  console.log(error);
-  console.log("Code:", error.code);
-  console.log("Key Pattern:", error.keyPattern);
-  console.log("Key Value:", error.keyValue);
-  console.log("=====================================");
-
-  throw error;
-
-}};
+      if (error.code === 11000) {
+        throw new Error("Admission number already exists");
+      }
+      throw error;
+    }
+  };
   /* =========================================
    GET ALL STUDENTS
 ========================================= */

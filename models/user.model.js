@@ -214,23 +214,17 @@ userSchema.index({
 //
 // ============================================================
 
-userSchema.pre("save", async function (next) {
+userSchema.pre("save", async function () {
   if (!this.isModified("password") || !this.password) {
-    return next();
+    return;
   }
 
-  try {
-    this.password = await bcrypt.hash(
-      this.password,
-      PASSWORD_SALT_ROUNDS
-    );
+  this.password = await bcrypt.hash(
+    this.password,
+    PASSWORD_SALT_ROUNDS
+  );
 
-    this.passwordChangedAt = new Date();
-
-    return next();
-  } catch (error) {
-    return next(error);
-  }
+  this.passwordChangedAt = new Date();
 });
 
 // ============================================================

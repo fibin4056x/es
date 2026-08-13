@@ -24,7 +24,6 @@ if (ENV.TRUST_PROXY) {
 
 app.use(helmet());
 app.use(cookieParser());
-app.use(mongoSanitize());
 
 /* ============================================================
    CORS
@@ -57,7 +56,7 @@ app.use(
 );
 
 /* ============================================================
-   BODY PARSERS
+   BODY PARSERS & MONGO SANITIZE
 ============================================================ */
 
 app.use(express.json({ limit: "1mb" }));
@@ -68,6 +67,14 @@ app.use(
     limit: "1mb",
   })
 );
+
+// Express 5 compatible in-place NoSQL injection sanitization
+app.use((req, res, next) => {
+  if (req.body) mongoSanitize.sanitize(req.body);
+  if (req.params) mongoSanitize.sanitize(req.params);
+  if (req.query) mongoSanitize.sanitize(req.query);
+  next();
+});
 
 /* ============================================================
    HEALTH CHECK

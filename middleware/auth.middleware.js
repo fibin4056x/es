@@ -3,7 +3,8 @@ import { verifyAccessToken } from "../validations/auth.tokens.js";
 import { validateUserFromToken } from "../services/auth.service.js";
 
 const getBearerToken = (req) => {
-  const authorization = req.headers.authorization;
+  const authorization =
+    req.headers.authorization;
 
   if (
     typeof authorization !== "string" ||
@@ -12,25 +13,50 @@ const getBearerToken = (req) => {
     return null;
   }
 
-  const token = authorization.slice(7).trim();
+  const token =
+    authorization
+      .slice(7)
+      .trim();
 
   return token || null;
 };
 
-export const authenticate = async (req, res, next) => {
+export const authenticate = async (
+  req,
+  res,
+  next
+) => {
   try {
-    const token = getBearerToken(req);
+    const token =
+      getBearerToken(req);
 
     if (!token) {
-      throw new ApiError(401, "Authentication required.");
+      throw new ApiError(
+        401,
+        "Authentication required."
+      );
     }
 
-    const decoded = verifyAccessToken(token);
+    const decoded =
+      verifyAccessToken(token);
 
-    const user = await validateUserFromToken(decoded.sub);
+    if (!decoded?.sub) {
+      throw new ApiError(
+        401,
+        "Invalid authentication token."
+      );
+    }
+
+    const user =
+      await validateUserFromToken(
+        decoded.sub
+      );
 
     if (!user) {
-      throw new ApiError(401, "Authentication required.");
+      throw new ApiError(
+        401,
+        "Authentication required."
+      );
     }
 
     req.user = user;
