@@ -1,5 +1,7 @@
 import express from "express";
+
 import authRoutes from "./auth.routes.js";
+import userRoutes from "./user.routes.js";
 import teacherRoutes from "./teacher.routes.js";
 import classRoutes from "./class.routes.js";
 import studentRoutes from "./student.routes.js";
@@ -13,18 +15,91 @@ import academicCalendarRoutes from "./academicCalendar.routes.js";
 
 const router = express.Router();
 
+/*
+|--------------------------------------------------------------------------
+| AUTHENTICATION
+|--------------------------------------------------------------------------
+*/
 router.use("/auth", authRoutes);
-router.use("/teachers", teacherRoutes);
-router.use("/classes", classRoutes);
+
+/*
+|--------------------------------------------------------------------------
+| USER MANAGEMENT
+|--------------------------------------------------------------------------
+*/
+router.use("/users", userRoutes);
+
+/*
+|--------------------------------------------------------------------------
+| DASHBOARD
+|--------------------------------------------------------------------------
+*/
 router.use("/dashboard", dashboardRoutes);
-router.use("/attendance", attendanceRoutes);
+
+/*
+|--------------------------------------------------------------------------
+| TEACHERS
+|--------------------------------------------------------------------------
+*/
+router.use("/teachers", teacherRoutes);
+
+/*
+|--------------------------------------------------------------------------
+| STUDENTS
+|--------------------------------------------------------------------------
+*/
 router.use("/students", studentRoutes);
+
+/*
+|--------------------------------------------------------------------------
+| CLASSES
+|--------------------------------------------------------------------------
+*/
+router.use("/classes", classRoutes);
+
+/*
+|--------------------------------------------------------------------------
+| DIVISIONS
+|--------------------------------------------------------------------------
+*/
 router.use("/divisions", divisionRoutes);
-router.use("/export", exportRoutes);
-router.use("/import", importRoutes);
+
+/*
+|--------------------------------------------------------------------------
+| ATTENDANCE
+|--------------------------------------------------------------------------
+*/
+router.use("/attendance", attendanceRoutes);
+
+/*
+|--------------------------------------------------------------------------
+| REPORTS
+|--------------------------------------------------------------------------
+*/
 router.use("/reports", reportsRoutes);
-router.use("/academic-calendar", academicCalendarRoutes);
+
+/*
+|--------------------------------------------------------------------------
+| EXPORT
+|--------------------------------------------------------------------------
+*/
+router.use("/export", exportRoutes);
+
+/*
+|--------------------------------------------------------------------------
+| IMPORT
+|--------------------------------------------------------------------------
+*/
+router.use("/import", importRoutes);
+
+/*
+|--------------------------------------------------------------------------
+| ACADEMIC CALENDAR
+|--------------------------------------------------------------------------
+*/
+router.use(
+  "/academic-calendar",
+  academicCalendarRoutes
+);
 
 export default router;
-
-
