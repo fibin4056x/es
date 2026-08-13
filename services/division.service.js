@@ -44,30 +44,39 @@ export const createDivisionService =
 
 
 
-/* =========================================
-   GET ALL DIVISIONS
-========================================= */
+export const getAllDivisionsService = async (options = {}) => {
+  let page = Math.max(1, Number(options.page) || 1);
+  let limit = Math.min(100, Math.max(1, Number(options.limit) || 20));
+  const skip = (page - 1) * limit;
 
-export const getAllDivisionsService =
-  async () => {
+  const filter = {};
+  if (options.classId) filter.classId = options.classId;
+  if (options.status) filter.status = options.status;
+  if (options.search && options.search.trim()) {
+    filter.name = new RegExp(options.search.trim(), "i");
+  }
 
-    const divisions =
-      await DivisionModel.find()
+  const totalRecords = await DivisionModel.countDocuments(filter);
+  const divisions = await DivisionModel.find(filter)
+    .populate("classId", "name")
+    .populate("assignedTeacher", "name email")
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
+    .lean();
 
-        .populate(
-          "classId",
-          "name"
-        )
-
-        .populate(
-          "assignedTeacher",
-          "name email"
-        )
-
-        .sort({ createdAt: -1 });
-
-    return divisions;
+  return {
+    divisions,
+    pagination: {
+      totalRecords,
+      currentPage: page,
+      totalPages: Math.ceil(totalRecords / limit) || 1,
+      limit,
+      hasNextPage: page * limit < totalRecords,
+      hasPreviousPage: page > 1,
+    },
   };
+};
 
 
 

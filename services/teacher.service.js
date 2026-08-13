@@ -2,28 +2,72 @@ import User from "../models/user.model.js";
 import DivisionModel from "../models/division.model.js";
 import bcrypt from "bcryptjs";
 
+import { sendTeacherAccountCreatedEmail } from "./email.service.js";
+
 export const createTeacherService = async (teacherData) => {
-    const existingTeacher = await User.findOne({ email: teacherData.email, });
-    if (existingTeacher) {
-        throw new Error("Teacher with this email already exists");
-    }
+  const email = teacherData.email?.trim().toLowerCase();
+  const existingTeacher = await User.findOne({ email });
+  if (existingTeacher) {
+    throw new Error("Teacher with this email already exists");
+  }
 
-const teacher = await User.create({
-  ...teacherData,
-  role: "teacher",
-  isActive: true,
-  status: "active",
-});
-    return teacher;
-}
+  const teacher = await User.create({
+    ...teacherData,
+    email,
+    role: "teacher",
+    isActive: true,
+    emailVerified: false,
+    firstLoginCompleted: false,
+    status: "pending_verification",
+  });
 
-export const getAllTeacherService =async () => {
-    const teacher = await User.find({
-        role:"teacher",
-    }).select("-password");
+  // Optionally send welcome notification email
+  try {
+    await sendTeacherAccountCreatedEmail({ to: teacher.email, name: teacher.name });
+  } catch (err) {
+    console.error("Welcome email warning:", err.message);
+  }
 
-    return teacher;
-}
+  return teacher;
+};
+
+export const getAllTeacherService = async (options = {}) => {
+  let page = Math.max(1, Number(options.page) || 1);
+  let limit = Math.min(100, Math.max(1, Number(options.limit) || 20));
+  const skip = (page - 1) * limit;
+
+  const filter = { role: "teacher" };
+  if (options.status) {
+    filter.status = options.status;
+  }
+  if (options.search && options.search.trim()) {
+    const searchRegex = new RegExp(options.search.trim(), "i");
+    filter.$or = [
+      { name: searchRegex },
+      { email: searchRegex },
+    ];
+  }
+
+  const totalRecords = await User.countDocuments(filter);
+  const teachers = await User.find(filter)
+    .select("-password")
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
+    .lean();
+
+  return {
+    teachers,
+    pagination: {
+      totalRecords,
+      currentPage: page,
+      totalPages: Math.ceil(totalRecords / limit) || 1,
+      limit,
+      hasNextPage: page * limit < totalRecords,
+      hasPreviousPage: page > 1,
+    },
+  };
+};
 
 export const getTeacherByIdService =async (teacherId) => {
     const teacher =await User.findOne({

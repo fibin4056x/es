@@ -1,4 +1,5 @@
 import express from "express";
+import upload from "../middleware/upload.middleware.js";
 import {
   getDailyAttendanceReportController,
   getMonthlyAttendanceReportController,
@@ -6,76 +7,101 @@ import {
   getClassAttendanceReportController,
   getSchoolAttendanceReportController,
   getStudentAttendanceHistoryController,
+  createReportController,
+  getInboxReportsController,
+  getSentReportsController,
+  getReportByIdController,
+  markReportReadController,
+  deleteReportController,
 } from "../controllers/reports.controller.js";
 import { authenticate } from "../middleware/auth.middleware.js";
 import { authorize } from "../middleware/role.middleware.js";
 
 const router = express.Router();
 
+router.use(authenticate);
+
 /* =========================================
-   1. DAILY ATTENDANCE REPORT (PRINCIPAL ONLY)
-   GET /api/reports/attendance/daily
+   EXISTING ATTENDANCE REPORTS
 ========================================= */
+
 router.get(
   "/attendance/daily",
-  authenticate,
   authorize("principal"),
   getDailyAttendanceReportController
 );
 
-/* =========================================
-   2. MONTHLY ATTENDANCE REPORT (PRINCIPAL ONLY)
-   GET /api/reports/attendance/monthly
-========================================= */
 router.get(
   "/attendance/monthly",
-  authenticate,
   authorize("principal"),
   getMonthlyAttendanceReportController
 );
 
-/* =========================================
-   3. SCHOOL ATTENDANCE REPORT (PRINCIPAL ONLY)
-   GET /api/reports/attendance/school
-========================================= */
 router.get(
   "/attendance/school",
-  authenticate,
   authorize("principal"),
   getSchoolAttendanceReportController
 );
 
-/* =========================================
-   4. CLASS ATTENDANCE REPORT (PRINCIPAL ONLY)
-   GET /api/reports/attendance/class/:classId
-========================================= */
 router.get(
   "/attendance/class/:classId",
-  authenticate,
   authorize("principal"),
   getClassAttendanceReportController
 );
 
-/* =========================================
-   5. DIVISION ATTENDANCE REPORT (PRINCIPAL & TEACHER)
-   GET /api/reports/attendance/division/:divisionId
-========================================= */
 router.get(
   "/attendance/division/:divisionId",
-  authenticate,
   authorize("principal", "teacher"),
   getDivisionAttendanceReportController
 );
 
-/* =========================================
-   6. STUDENT ATTENDANCE HISTORY REPORT (PRINCIPAL & TEACHER)
-   GET /api/reports/attendance/student/:studentId
-========================================= */
 router.get(
   "/attendance/student/:studentId",
-  authenticate,
   authorize("principal", "teacher"),
   getStudentAttendanceHistoryController
+);
+
+/* =========================================
+   INDIVIDUAL COMMUNICATION REPORTS
+========================================= */
+
+// Fixed paths first
+router.get(
+  "/inbox",
+  authorize("principal", "teacher"),
+  getInboxReportsController
+);
+
+router.get(
+  "/sent",
+  authorize("principal", "teacher"),
+  getSentReportsController
+);
+
+router.post(
+  "/",
+  authorize("principal", "teacher"),
+  upload.array("attachments", 10),
+  createReportController
+);
+
+// Member paths after
+router.get(
+  "/:id",
+  authorize("principal", "teacher"),
+  getReportByIdController
+);
+
+router.patch(
+  "/:id/read",
+  authorize("principal", "teacher"),
+  markReportReadController
+);
+
+router.delete(
+  "/:id",
+  authorize("principal", "teacher"),
+  deleteReportController
 );
 
 export default router;

@@ -2,6 +2,7 @@ import {
   markAttendanceService,
   getAttendanceByDateService,
   getDivisionAttendanceService,
+  getAttendanceCalendarService,
   uploadAttendanceFileService,
   replaceAttendanceDocumentService,
   deleteAttendanceDocumentService,
@@ -36,6 +37,35 @@ export const markAttendanceController = asyncHandler(
         201,
         attendance,
         "Attendance marked successfully."
+      )
+    );
+  }
+);
+
+/* =========================================
+   GET ATTENDANCE CALENDAR
+========================================= */
+
+export const getAttendanceCalendarController = asyncHandler(
+  async (req, res) => {
+    const { divisionId } = req.params;
+    const { month, year } = req.query;
+
+    if (!divisionId) {
+      throw new ApiError(400, "Division ID is required.");
+    }
+
+    const calendarData = await getAttendanceCalendarService(
+      divisionId,
+      month,
+      year
+    );
+
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        calendarData,
+        "Attendance calendar fetched successfully."
       )
     );
   }
@@ -92,15 +122,6 @@ export const getDivisionAttendanceController =
   asyncHandler(async (req, res) => {
     const { divisionId } = req.params;
 
-    let {
-      page = 1,
-      limit = 20,
-    } = req.query;
-
-    /* =========================================
-       VALIDATE REQUEST
-    ========================================= */
-
     if (!divisionId) {
       throw new ApiError(
         400,
@@ -108,14 +129,10 @@ export const getDivisionAttendanceController =
       );
     }
 
-    page = Math.max(1, Number(page) || 1);
-    limit = Math.max(1, Number(limit) || 20);
-
     const attendance =
       await getDivisionAttendanceService(
         divisionId,
-        page,
-        limit
+        req.query
       );
 
     return res.status(200).json(

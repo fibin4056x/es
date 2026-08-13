@@ -9,8 +9,49 @@ import ApiError from "../utils/ApiError.js";
    PIPELINE BUILDER FOR STUDENT EXPORT
 ========================================= */
 
-const buildStudentExportPipeline = (matchFilter = {}) => {
-  return [
+/* =========================================
+   PIPELINE BUILDER FOR STUDENT EXPORT
+========================================= */
+
+const buildStudentExportPipeline = async (filters = {}) => {
+  const { classId, divisionId, teacherId, status, academicYear, search } = filters;
+  const matchFilter = {};
+
+  if (classId && mongoose.Types.ObjectId.isValid(classId)) {
+    matchFilter.classId = new mongoose.Types.ObjectId(classId);
+  }
+
+  if (divisionId && mongoose.Types.ObjectId.isValid(divisionId)) {
+    matchFilter.divisionId = new mongoose.Types.ObjectId(divisionId);
+  }
+
+  if (teacherId && mongoose.Types.ObjectId.isValid(teacherId)) {
+    const assignedDivisions = await DivisionModel.find({
+      assignedTeacher: teacherId,
+    }).select("_id");
+
+    const divisionIds = assignedDivisions.map(
+      (division) => new mongoose.Types.ObjectId(division._id)
+    );
+    matchFilter.divisionId = { $in: divisionIds };
+  }
+
+  if (status) {
+    matchFilter.status = status;
+  }
+
+  if (search && search.trim()) {
+    const searchRegex = new RegExp(search.trim(), "i");
+    matchFilter.$or = [
+      { nameEnglish: searchRegex },
+      { nameMalayalam: searchRegex },
+      { admissionNumber: searchRegex },
+      { parentName: searchRegex },
+      { parentPhone: searchRegex },
+    ];
+  }
+
+  const pipeline = [
     { $match: matchFilter },
     {
       $lookup: {
@@ -40,6 +81,15 @@ const buildStudentExportPipeline = (matchFilter = {}) => {
         preserveNullAndEmptyArrays: true,
       },
     },
+  ];
+
+  if (academicYear) {
+    pipeline.push({
+      $match: { "classInfo.academicYear": academicYear },
+    });
+  }
+
+  pipeline.push(
     {
       $sort: {
         "classInfo.name": 1,
@@ -70,21 +120,24 @@ const buildStudentExportPipeline = (matchFilter = {}) => {
         economicCategory: 1,
         status: 1,
       },
-    },
-  ];
+    }
+  );
+
+  return pipeline;
 };
 
 /* =========================================
    1. EXPORT ALL STUDENTS
 ========================================= */
 
-export const exportAllStudentsService = async () => {
-  const pipeline = buildStudentExportPipeline({});
+export const exportAllStudentsService = async (filters = {}) => {
+  const pipeline = await buildStudentExportPipeline(filters);
   const students = await StudentModel.aggregate(pipeline);
 
   return {
     metadata: {
       scope: "all",
+      filters,
     },
     data: students,
   };
@@ -94,7 +147,7 @@ export const exportAllStudentsService = async () => {
    2. EXPORT STUDENTS BY CLASS
 ========================================= */
 
-export const exportStudentsByClassService = async (classId) => {
+export const exportStudentsByClassService = async (classId, filters = {}) => {
   if (!mongoose.Types.ObjectId.isValid(classId)) {
     throw new ApiError(400, "Invalid Class ID");
   }
@@ -104,16 +157,15 @@ export const exportStudentsByClassService = async (classId) => {
     throw new ApiError(404, "Class not found");
   }
 
-  const pipeline = buildStudentExportPipeline({
-    classId: new mongoose.Types.ObjectId(classId),
-  });
-
+  const mergedFilters = { ...filters, classId };
+  const pipeline = await buildStudentExportPipeline(mergedFilters);
   const students = await StudentModel.aggregate(pipeline);
 
   return {
     metadata: {
       scope: "class",
       className: classData.name,
+      filters: mergedFilters,
     },
     data: students,
   };
@@ -123,7 +175,7 @@ export const exportStudentsByClassService = async (classId) => {
    3. EXPORT STUDENTS BY DIVISION
 ========================================= */
 
-export const exportStudentsByDivisionService = async (divisionId) => {
+export const exportStudentsByDivisionService = async (divisionId, filters = {}) => {
   if (!mongoose.Types.ObjectId.isValid(divisionId)) {
     throw new ApiError(400, "Invalid Division ID");
   }
@@ -136,10 +188,8 @@ export const exportStudentsByDivisionService = async (divisionId) => {
     throw new ApiError(404, "Division not found");
   }
 
-  const pipeline = buildStudentExportPipeline({
-    divisionId: new mongoose.Types.ObjectId(divisionId),
-  });
-
+  const mergedFilters = { ...filters, divisionId };
+  const pipeline = await buildStudentExportPipeline(mergedFilters);
   const students = await StudentModel.aggregate(pipeline);
 
   return {
@@ -147,6 +197,7 @@ export const exportStudentsByDivisionService = async (divisionId) => {
       scope: "division",
       className: divisionData.classId?.name || "",
       divisionName: divisionData.name,
+      filters: mergedFilters,
     },
     data: students,
   };
@@ -156,7 +207,7 @@ export const exportStudentsByDivisionService = async (divisionId) => {
    4. EXPORT STUDENTS BY TEACHER
 ========================================= */
 
-export const exportStudentsByTeacherService = async (teacherId) => {
+export const exportStudentsByTeacherService = async (teacherId, filters = {}) => {
   if (!mongoose.Types.ObjectId.isValid(teacherId)) {
     throw new ApiError(400, "Invalid Teacher ID");
   }
@@ -166,34 +217,15 @@ export const exportStudentsByTeacherService = async (teacherId) => {
     throw new ApiError(404, "Teacher not found");
   }
 
-  const assignedDivisions = await DivisionModel.find({
-    assignedTeacher: teacherId,
-  }).select("_id");
-
-  const divisionIds = assignedDivisions.map(
-    (division) => new mongoose.Types.ObjectId(division._id)
-  );
-
-  if (!divisionIds.length) {
-    return {
-      metadata: {
-        scope: "teacher",
-        teacherName: teacher.name,
-      },
-      data: [],
-    };
-  }
-
-  const pipeline = buildStudentExportPipeline({
-    divisionId: { $in: divisionIds },
-  });
-
+  const mergedFilters = { ...filters, teacherId };
+  const pipeline = await buildStudentExportPipeline(mergedFilters);
   const students = await StudentModel.aggregate(pipeline);
 
   return {
     metadata: {
       scope: "teacher",
       teacherName: teacher.name,
+      filters: mergedFilters,
     },
     data: students,
   };

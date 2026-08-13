@@ -5,6 +5,7 @@ import {
   markAttendanceController,
   getAttendanceByDateController,
   getDivisionAttendanceController,
+  getAttendanceCalendarController,
   uploadAttendanceFileController,
   updateAttendanceController,
   replaceAttendanceDocumentController,
@@ -39,6 +40,20 @@ router.post(
   ),
   validateAttendance,
   markAttendanceController
+);
+
+/* =========================================
+   GET ATTENDANCE CALENDAR
+========================================= */
+
+router.get(
+  "/calendar/:divisionId",
+  authenticate,
+  authorize(
+    "principal",
+    "teacher"
+  ),
+  getAttendanceCalendarController
 );
 
 /* =========================================

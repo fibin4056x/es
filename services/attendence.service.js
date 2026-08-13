@@ -1,9 +1,11 @@
+import mongoose from "mongoose";
 import AttendanceModel from "../models/attendance.model.js";
 import StudentModel from "../models/student.model.js";
 import DivisionModel from "../models/division.model.js";
 import ApiError from "../utils/ApiError.js";
 import ClassModel from "../models/class.model.js";
 import UserModel from "../models/user.model.js";
+import cloudinary from "../config/cloudinary.js";
 /* =========================================
    POPULATE OPTIONS
 ========================================= */
@@ -306,71 +308,210 @@ export const getAttendanceByDateService = async (
 };
 
 /* =========================================
-   GET DIVISION ATTENDANCE HISTORY
+   GET ATTENDANCE CALENDAR
+========================================= */
+
+export const getAttendanceCalendarService = async (
+  divisionId,
+  month,
+  year
+) => {
+  if (!divisionId) {
+    throw new ApiError(400, "Division ID is required.");
+  }
+
+  const division = await DivisionModel.findById(divisionId).lean();
+  if (!division) {
+    throw new ApiError(404, "Division not found.");
+  }
+
+  const selectedYear = Number(year) || new Date().getFullYear();
+  const selectedMonth = Number(month) || (new Date().getMonth() + 1);
+
+  if (selectedMonth < 1 || selectedMonth > 12) {
+    throw new ApiError(400, "Invalid month value.");
+  }
+
+  const startDate = new Date(Date.UTC(selectedYear, selectedMonth - 1, 1, 0, 0, 0));
+  const endDate = new Date(Date.UTC(selectedYear, selectedMonth, 0, 23, 59, 59, 999));
+
+  // Count active students in division
+  const totalStudentsInDivision = await StudentModel.countDocuments({
+    divisionId,
+    status: "active",
+  });
+
+  const aggregateResults = await AttendanceModel.aggregate([
+    {
+      $match: {
+        divisionId: new mongoose.Types.ObjectId(divisionId),
+        date: { $gte: startDate, $lte: endDate },
+      },
+    },
+    {
+      $group: {
+        _id: { $dateToString: { format: "%Y-%m-%d", date: "$date" } },
+        totalMarked: { $sum: 1 },
+        present: {
+          $sum: { $cond: [{ $eq: ["$status", "present"] }, 1, 0] },
+        },
+        absent: {
+          $sum: { $cond: [{ $eq: ["$status", "absent"] }, 1, 0] },
+        },
+        late: {
+          $sum: { $cond: [{ $eq: ["$status", "late"] }, 1, 0] },
+        },
+        leave: {
+          $sum: { $cond: [{ $eq: ["$status", "leave"] }, 1, 0] },
+        },
+      },
+    },
+    { $sort: { _id: 1 } },
+  ]);
+
+  const statsMap = new Map();
+  for (const item of aggregateResults) {
+    statsMap.set(item._id, item);
+  }
+
+  const totalDaysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
+  const days = [];
+
+  for (let day = 1; day <= totalDaysInMonth; day++) {
+    const dateStr = `${selectedYear}-${String(selectedMonth).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const dayStat = statsMap.get(dateStr);
+
+    if (dayStat) {
+      const total = totalStudentsInDivision || dayStat.totalMarked;
+      const presentCount = dayStat.present;
+      const attendancePercentage =
+        total > 0 ? Number(((presentCount / total) * 100).toFixed(1)) : 0;
+
+      days.push({
+        date: dateStr,
+        marked: true,
+        total,
+        present: dayStat.present,
+        absent: dayStat.absent,
+        late: dayStat.late,
+        leave: dayStat.leave,
+        attendancePercentage,
+      });
+    } else {
+      days.push({
+        date: dateStr,
+        marked: false,
+        total: 0,
+        present: 0,
+        absent: 0,
+        late: 0,
+        leave: 0,
+        attendancePercentage: 0,
+      });
+    }
+  }
+
+  return {
+    year: selectedYear,
+    month: selectedMonth,
+    divisionId,
+    days,
+  };
+};
+
+/* =========================================
+   GET DIVISION ATTENDANCE HISTORY / DATE RANGE
 ========================================= */
 
 export const getDivisionAttendanceService = async (
   divisionId,
-  page = 1,
-  limit = 20
+  options = {}
 ) => {
-  /* =========================================
-     VALIDATE DIVISION
-  ========================================= */
-
-  const division = await DivisionModel.findById(
-    divisionId
-  ).lean();
-
+  const division = await DivisionModel.findById(divisionId).lean();
   if (!division) {
-    throw new ApiError(
-      404,
-      "Division not found."
-    );
+    throw new ApiError(404, "Division not found.");
   }
 
-  page = Number(page);
-  limit = Number(limit);
+  // Handle both signatures: options object or page/limit arguments
+  let page = 1;
+  let limit = 20;
+  let startDate, endDate, status, studentId, classId, sortBy = "date", sortOrder = "desc";
 
+  if (typeof options === "object" && options !== null) {
+    page = options.page || 1;
+    limit = options.limit || 20;
+    startDate = options.startDate;
+    endDate = options.endDate;
+    status = options.status;
+    studentId = options.studentId;
+    classId = options.classId;
+    if (options.sortBy) sortBy = options.sortBy;
+    if (options.sortOrder) sortOrder = options.sortOrder;
+  } else {
+    page = arguments[1] || 1;
+    limit = arguments[2] || 20;
+  }
+
+  page = Math.max(1, Number(page) || 1);
+  limit = Math.min(100, Math.max(1, Number(limit) || 20));
   const skip = (page - 1) * limit;
 
-  /* =========================================
-     GET TOTAL RECORDS
-  ========================================= */
+  const queryFilter = { divisionId };
 
-  const totalRecords =
-    await AttendanceModel.countDocuments({
-      divisionId,
-    });
+  if (classId && mongoose.Types.ObjectId.isValid(classId)) {
+    queryFilter.classId = classId;
+  }
 
-  /* =========================================
-     GET HISTORY
-  ========================================= */
+  if (studentId && mongoose.Types.ObjectId.isValid(studentId)) {
+    queryFilter.studentId = studentId;
+  }
 
-  const attendance =
-    await AttendanceModel.find({
-      divisionId,
-    })
-      .populate(attendancePopulate)
-      .sort({
-        date: -1,
-        createdAt: -1,
-      })
-      .skip(skip)
-      .limit(limit)
-      .lean();
+  if (status) {
+    queryFilter.status = String(status).toLowerCase();
+  }
+
+  if (startDate || endDate) {
+    queryFilter.date = {};
+    if (startDate) {
+      const start = new Date(startDate);
+      if (!isNaN(start.getTime())) {
+        start.setHours(0, 0, 0, 0);
+        queryFilter.date.$gte = start;
+      }
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      if (!isNaN(end.getTime())) {
+        end.setHours(23, 59, 59, 999);
+        queryFilter.date.$lte = end;
+      }
+    }
+  }
+
+  const sortDirection = String(sortOrder).toLowerCase() === "asc" ? 1 : -1;
+  const sortOptions = {};
+  sortOptions[sortBy] = sortDirection;
+  if (sortBy !== "createdAt") {
+    sortOptions.createdAt = -1;
+  }
+
+  const totalRecords = await AttendanceModel.countDocuments(queryFilter);
+
+  const attendance = await AttendanceModel.find(queryFilter)
+    .populate(attendancePopulate)
+    .sort(sortOptions)
+    .skip(skip)
+    .limit(limit)
+    .lean();
 
   return {
     attendance,
     pagination: {
       totalRecords,
       currentPage: page,
-      totalPages: Math.ceil(
-        totalRecords / limit
-      ),
+      totalPages: Math.ceil(totalRecords / limit) || 1,
       limit,
-      hasNextPage:
-        page * limit < totalRecords,
+      hasNextPage: page * limit < totalRecords,
       hasPreviousPage: page > 1,
     },
   };
@@ -478,12 +619,14 @@ export const replaceAttendanceDocumentService = async (
     );
   }
 
-  /*
-    Delete old file from Cloudinary here
-    Example:
-
-    await cloudinary.uploader.destroy(document.publicId);
-  */
+  if (document.publicId) {
+    try {
+      await cloudinary.uploader.destroy(document.publicId, { resource_type: "image" });
+      await cloudinary.uploader.destroy(document.publicId, { resource_type: "raw" });
+    } catch (err) {
+      console.error("Cloudinary delete error on replace:", err);
+    }
+  }
 
   document.url = file.path;
   document.publicId = file.filename;
@@ -530,11 +673,14 @@ export const deleteAttendanceDocumentService = async (
      DELETE FROM CLOUDINARY
   ========================================= */
 
-  /*
-  await cloudinary.uploader.destroy(
-    document.publicId
-  );
-  */
+  if (document.publicId) {
+    try {
+      await cloudinary.uploader.destroy(document.publicId, { resource_type: "image" });
+      await cloudinary.uploader.destroy(document.publicId, { resource_type: "raw" });
+    } catch (err) {
+      console.error("Cloudinary delete error on document delete:", err);
+    }
+  }
 
   /* =========================================
      REMOVE DOCUMENT

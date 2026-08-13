@@ -468,9 +468,9 @@ export async function getAcademicCalendarService(
     1
   );
 
-  const numericLimit = Math.max(
-    Number(limit) || 20,
-    1
+  const numericLimit = Math.min(
+    100,
+    Math.max(Number(limit) || 20, 1)
   );
 
   const skip =
@@ -480,8 +480,22 @@ export async function getAcademicCalendarService(
      SORTING
   ========================================= */
 
+  const ALLOWED_SORT_FIELDS = [
+    "startDate",
+    "endDate",
+    "createdAt",
+    "updatedAt",
+    "priority",
+    "title",
+    "category",
+  ];
+
+  const validSortBy = ALLOWED_SORT_FIELDS.includes(sortBy)
+    ? sortBy
+    : "startDate";
+
   const sort = {
-    [sortBy]:
+    [validSortBy]:
       sortOrder === "desc"
         ? -1
         : 1,
@@ -491,7 +505,7 @@ export async function getAcademicCalendarService(
      FETCH DATA
   ========================================= */
 
-  const [items, total] =
+  const [items, totalRecords] =
     await Promise.all([
       AcademicCalendar.find(query)
         .sort(sort)
@@ -512,21 +526,30 @@ export async function getAcademicCalendarService(
       ),
     ]);
 
+  const totalPages = Math.max(
+    Math.ceil(totalRecords / numericLimit),
+    1
+  );
+
   /* =========================================
      RESPONSE
   ========================================= */
 
   return {
     items,
-    total,
+    data: items,
+    total: totalRecords,
     page: numericPage,
     limit: numericLimit,
-    totalPages: Math.max(
-      Math.ceil(
-        total / numericLimit
-      ),
-      1
-    ),
+    totalPages,
+    pagination: {
+      totalRecords,
+      currentPage: numericPage,
+      totalPages,
+      limit: numericLimit,
+      hasNextPage: numericPage * numericLimit < totalRecords,
+      hasPreviousPage: numericPage > 1,
+    },
   };
 }
 

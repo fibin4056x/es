@@ -54,17 +54,14 @@ export const getAllTeachers = async (
   res
 ) => {
   try {
-
-    const teachers =
-      await getAllTeacherService();
+    const result = await getAllTeacherService(req.query);
 
     res.status(200).json({
       success: true,
-      data: teachers,
+      data: result.teachers,
+      pagination: result.pagination,
     });
-
   } catch (error) {
-
     console.log(
       "GET TEACHERS ERROR:",
       error.message

@@ -9,6 +9,15 @@ import {
   getStudentAttendanceHistoryService,
 } from "../services/reports.service.js";
 
+import {
+  createReportService,
+  getInboxReportsService,
+  getSentReportsService,
+  getReportByIdService,
+  markReportReadService,
+  deleteReportService,
+} from "../services/reports.communication.service.js";
+
 /* =========================================
    1. DAILY ATTENDANCE REPORT CONTROLLER
 ========================================= */
@@ -156,3 +165,95 @@ export const getStudentAttendanceHistoryController = asyncHandler(
       );
   }
 );
+
+/* =========================================
+   7. COMPOSE / CREATE INDIVIDUAL REPORT
+   POST /api/reports
+========================================= */
+
+export const createReportController = asyncHandler(async (req, res) => {
+  const files = req.files || (req.file ? [req.file] : []);
+  const report = await createReportService(req.body, req.user, files);
+
+  return res
+    .status(201)
+    .json(new ApiResponse(201, report, "Report sent successfully."));
+});
+
+/* =========================================
+   8. GET REPORT INBOX
+   GET /api/reports/inbox
+========================================= */
+
+export const getInboxReportsController = asyncHandler(async (req, res) => {
+  const result = await getInboxReportsService(req.user.id, req.query);
+
+  return res.status(200).json({
+    success: true,
+    message: "Inbox reports fetched successfully.",
+    items: result.items,
+    data: result.items,
+    pagination: result.pagination,
+  });
+});
+
+/* =========================================
+   9. GET REPORT SENT
+   GET /api/reports/sent
+========================================= */
+
+export const getSentReportsController = asyncHandler(async (req, res) => {
+  const result = await getSentReportsService(req.user.id, req.query);
+
+  return res.status(200).json({
+    success: true,
+    message: "Sent reports fetched successfully.",
+    items: result.items,
+    data: result.items,
+    pagination: result.pagination,
+  });
+});
+
+/* =========================================
+   10. GET INDIVIDUAL REPORT BY ID
+   GET /api/reports/:id
+========================================= */
+
+export const getReportByIdController = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const report = await getReportByIdService(id, req.user.id, req.user.role);
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, report, "Report fetched successfully."));
+});
+
+/* =========================================
+   11. MARK REPORT AS READ
+   PATCH /api/reports/:id/read
+========================================= */
+
+export const markReportReadController = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const isRead = req.body.isRead !== undefined ? req.body.isRead : true;
+
+  const report = await markReportReadService(id, req.user.id, isRead);
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, report, "Report marked as read status updated."));
+});
+
+/* =========================================
+   12. DELETE REPORT
+   DELETE /api/reports/:id
+========================================= */
+
+export const deleteReportController = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const response = await deleteReportService(id, req.user.id, req.user.role);
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, response, response.message));
+});

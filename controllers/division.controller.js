@@ -35,16 +35,20 @@ export const createDivisionController = async (req, res) => {
 export const getAllDivisionsController = async (req, res) => {
   try {
     let divisions;
+    let pagination;
 
     if (req.user.role === "teacher") {
       divisions = await getTeacherDivisionsService(req.user.id);
     } else {
-      divisions = await getAllDivisionsService();
+      const result = await getAllDivisionsService(req.query);
+      divisions = result.divisions;
+      pagination = result.pagination;
     }
 
     res.status(200).json({
       success: true,
       data: divisions,
+      pagination,
     });
   } catch (error) {
     res.status(500).json({

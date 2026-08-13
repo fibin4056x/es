@@ -36,14 +36,41 @@ export const createClassService =
     );
   };
 
-export const getAllClassesService =
-  async () => {
-    return await ClassModel.find().sort({
+export const getAllClassesService = async (options = {}) => {
+  let page = Math.max(1, Number(options.page) || 1);
+  let limit = Math.min(100, Math.max(1, Number(options.limit) || 20));
+  const skip = (page - 1) * limit;
+
+  const filter = {};
+  if (options.academicYear) filter.academicYear = options.academicYear;
+  if (options.status) filter.status = options.status;
+  if (options.search && options.search.trim()) {
+    filter.name = new RegExp(options.search.trim(), "i");
+  }
+
+  const totalRecords = await ClassModel.countDocuments(filter);
+  const classes = await ClassModel.find(filter)
+    .sort({
       academicYear: -1,
       name: 1,
       createdAt: -1,
-    });
+    })
+    .skip(skip)
+    .limit(limit)
+    .lean();
+
+  return {
+    classes,
+    pagination: {
+      totalRecords,
+      currentPage: page,
+      totalPages: Math.ceil(totalRecords / limit) || 1,
+      limit,
+      hasNextPage: page * limit < totalRecords,
+      hasPreviousPage: page > 1,
+    },
   };
+};
 
 export const getClassByIdService =
   async (classId) => {

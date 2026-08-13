@@ -36,6 +36,7 @@ export const createClass = async (req, res) => {
 export const getAllClasses = async (req, res) => {
   try {
     let classes;
+    let pagination;
 
     if (req.user.role === "teacher") {
       const divisions = await getTeacherDivisionsService(req.user.id);
@@ -49,12 +50,15 @@ export const getAllClasses = async (req, res) => {
         ).values(),
       ];
     } else {
-      classes = await getAllClassesService();
+      const result = await getAllClassesService(req.query);
+      classes = result.classes;
+      pagination = result.pagination;
     }
 
     res.status(200).json({
       success: true,
       data: classes,
+      pagination,
     });
   } catch (error) {
     res.status(500).json({

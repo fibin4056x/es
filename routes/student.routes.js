@@ -53,12 +53,20 @@ router.get(
 
 router.get(
   "/division/:divisionId",
-
   authenticate,
-
   authorize("teacher", "principal"),
-
   getStudentsByDivisionController
+);
+
+/* =========================================
+   GET STUDENTS BY TEACHER
+========================================= */
+
+router.get(
+  "/teacher/students",
+  authenticate,
+  authorize("teacher"),
+  getStudentsByTeacherController
 );
 
 /* =========================================
@@ -67,11 +75,8 @@ router.get(
 
 router.get(
   "/:id",
-
   authenticate,
-
   authorize("principal", "teacher"),
-
   getStudentByIdController
 );
 
@@ -81,32 +86,19 @@ router.get(
 
 router.patch(
   "/:id",
-
   authenticate,
-
   authorize("principal", "teacher"),
-
   updateStudentController
 );
 
-
-router.get(
-  "/teacher/students",
-  authenticate,
-  authorize("teacher"),
-  getStudentsByTeacherController
-);
 /* =========================================
    DELETE STUDENT
 ========================================= */
 
 router.delete(
   "/:id",
-
   authenticate,
-
   authorize("principal"),
-
   deleteStudentController
 );
 

@@ -123,21 +123,47 @@ export const createStudentService =
    GET ALL STUDENTS
 ========================================= */
 
-export const getAllStudentsService =
-  async () => {
+export const getAllStudentsService = async (options = {}) => {
+  let page = Math.max(1, Number(options.page) || 1);
+  let limit = Math.min(100, Math.max(1, Number(options.limit) || 20));
+  const skip = (page - 1) * limit;
 
-    return await StudentModel
-      .find()
+  const queryFilter = {};
+  if (options.classId) queryFilter.classId = options.classId;
+  if (options.divisionId) queryFilter.divisionId = options.divisionId;
+  if (options.status) queryFilter.status = options.status;
+  if (options.search && options.search.trim()) {
+    const searchRegex = new RegExp(options.search.trim(), "i");
+    queryFilter.$or = [
+      { nameEnglish: searchRegex },
+      { nameMalayalam: searchRegex },
+      { admissionNumber: searchRegex },
+      { parentName: searchRegex },
+      { parentPhone: searchRegex },
+    ];
+  }
 
-      .populate(
-        studentPopulate
-      )
+  const totalRecords = await StudentModel.countDocuments(queryFilter);
 
-      .sort({
-        createdAt: -1,
-      });
+  const students = await StudentModel.find(queryFilter)
+    .populate(studentPopulate)
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
+    .lean();
 
+  return {
+    students,
+    pagination: {
+      totalRecords,
+      currentPage: page,
+      totalPages: Math.ceil(totalRecords / limit) || 1,
+      limit,
+      hasNextPage: page * limit < totalRecords,
+      hasPreviousPage: page > 1,
+    },
   };
+};
 
 /* =========================================
    GET STUDENT BY ID
@@ -331,119 +357,134 @@ export const deleteStudentService =
    GET STUDENTS BY DIVISION
 ========================================= */
 
-export const getStudentsByDivisionService =
-  async (
-    divisionId,
-    user
-  ) => {
+export const getStudentsByDivisionService = async (
+  divisionId,
+  user,
+  options = {}
+) => {
+  if (user?.role === "teacher") {
+    const assignedDivision = await DivisionModel.findOne({
+      _id: divisionId,
+      assignedTeacher: user.id,
+    });
 
-    if (user?.role === "teacher") {
-
-      const assignedDivision =
-        await DivisionModel.findOne({
-          _id: divisionId,
-          assignedTeacher: user.id,
-        });
-
-      if (!assignedDivision) {
-
-        throw new Error(
-          "Division not assigned to this teacher"
-        );
-
-      }
-
+    if (!assignedDivision) {
+      throw new Error("Division not assigned to this teacher");
     }
+  }
 
-    return await StudentModel
-      .find({
-        divisionId,
-        status: "active",
-      })
+  let page = Math.max(1, Number(options.page) || 1);
+  let limit = Math.min(100, Math.max(1, Number(options.limit) || 20));
+  const skip = (page - 1) * limit;
 
-      .populate(
-        studentPopulate
-      )
-
-      .sort({
-        rollNumber: 1,
-        nameEnglish: 1,
-      });
-
+  const queryFilter = {
+    divisionId,
+    status: options.status || "active",
   };
+
+  if (options.search && options.search.trim()) {
+    const searchRegex = new RegExp(options.search.trim(), "i");
+    queryFilter.$or = [
+      { nameEnglish: searchRegex },
+      { nameMalayalam: searchRegex },
+      { admissionNumber: searchRegex },
+    ];
+  }
+
+  const totalRecords = await StudentModel.countDocuments(queryFilter);
+
+  const students = await StudentModel.find(queryFilter)
+    .populate(studentPopulate)
+    .sort({
+      rollNumber: 1,
+      nameEnglish: 1,
+    })
+    .skip(skip)
+    .limit(limit)
+    .lean();
+
+  return {
+    students,
+    pagination: {
+      totalRecords,
+      currentPage: page,
+      totalPages: Math.ceil(totalRecords / limit) || 1,
+      limit,
+      hasNextPage: page * limit < totalRecords,
+      hasPreviousPage: page > 1,
+    },
+  };
+};
+
 /* =========================================
    GET STUDENTS BY TEACHER
 ========================================= */
 
-export const getStudentsByTeacherService =
-  async (teacherId) => {
+export const getStudentsByTeacherService = async (teacherId, options = {}) => {
+  try {
+    const divisions = await DivisionModel.find({
+      assignedTeacher: teacherId,
+    }).select("_id");
 
-    try {
+    const divisionIds = divisions.map((division) => division._id);
 
-      /* =====================================
-         GET TEACHER DIVISIONS
-      ===================================== */
-
-      const divisions =
-        await DivisionModel.find({
-          assignedTeacher: teacherId,
-        }).select("_id");
-
-      const divisionIds =
-        divisions.map(
-          (division) => division._id
-        );
-
-      /* =====================================
-         NO DIVISIONS ASSIGNED
-      ===================================== */
-
-      if (!divisionIds.length) {
-
-        return [];
-
-      }
-
-      /* =====================================
-         GET STUDENTS
-      ===================================== */
-
-      const students =
-        await StudentModel.find({
-
-          divisionId: {
-            $in: divisionIds,
-          },
-
-          status: "active",
-
-        })
-
-          .populate(
-            studentPopulate
-          )
-
-          .sort({
-
-            rollNumber: 1,
-
-            nameEnglish: 1,
-
-          });
-
-      return students;
-
-    } catch (error) {
-
-      console.log(
-        "GET TEACHER STUDENTS ERROR:",
-        error
-      );
-
-      throw new Error(
-        "Failed to fetch teacher students"
-      );
-
+    if (!divisionIds.length) {
+      return {
+        students: [],
+        pagination: {
+          totalRecords: 0,
+          currentPage: 1,
+          totalPages: 0,
+          limit: 20,
+          hasNextPage: false,
+          hasPreviousPage: false,
+        },
+      };
     }
 
-  };
+    let page = Math.max(1, Number(options.page) || 1);
+    let limit = Math.min(100, Math.max(1, Number(options.limit) || 20));
+    const skip = (page - 1) * limit;
+
+    const queryFilter = {
+      divisionId: { $in: divisionIds },
+      status: options.status || "active",
+    };
+
+    if (options.search && options.search.trim()) {
+      const searchRegex = new RegExp(options.search.trim(), "i");
+      queryFilter.$or = [
+        { nameEnglish: searchRegex },
+        { nameMalayalam: searchRegex },
+        { admissionNumber: searchRegex },
+      ];
+    }
+
+    const totalRecords = await StudentModel.countDocuments(queryFilter);
+
+    const students = await StudentModel.find(queryFilter)
+      .populate(studentPopulate)
+      .sort({
+        rollNumber: 1,
+        nameEnglish: 1,
+      })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    return {
+      students,
+      pagination: {
+        totalRecords,
+        currentPage: page,
+        totalPages: Math.ceil(totalRecords / limit) || 1,
+        limit,
+        hasNextPage: page * limit < totalRecords,
+        hasPreviousPage: page > 1,
+      },
+    };
+  } catch (error) {
+    console.log("GET TEACHER STUDENTS ERROR:", error);
+    throw new Error("Failed to fetch teacher students");
+  }
+};

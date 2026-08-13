@@ -2,6 +2,7 @@ import User from "../models/user.model.js";
 import StudentModel from "../models/student.model.js";
 import ClassModel from "../models/class.model.js";
 import AttendanceModel from "../models/attendance.model.js";
+import AcademicCalendar from "../models/academicCalendar.model.js";
 
 /* =========================================
    WEEKLY ATTENDANCE CHART
@@ -378,14 +379,12 @@ export const dashboardStatsService = async () => {
     getDivisionAttendanceRankings(5, 1),
     
     // Holiday Count in current month
-    import("../models/academicCalendar.model.js").then((m) =>
-      m.default.countDocuments({
-        status: "active",
-        category: { $in: ["holiday", "vacation"] },
-        startDate: { $lte: lastDayOfMonth },
-        endDate: { $gte: firstDayOfMonth },
-      })
-    ),
+    AcademicCalendar.countDocuments({
+      status: "active",
+      category: { $in: ["holiday", "vacation"] },
+      startDate: { $lte: lastDayOfMonth },
+      endDate: { $gte: firstDayOfMonth },
+    }),
   ]);
 
   const attendance = todayAttendance[0] || {

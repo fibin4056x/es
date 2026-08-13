@@ -39,19 +39,22 @@ export const createStudentController = async (req, res) => {
 
 export const getAllStudentsController = async (req, res) => {
   try {
-    let students;
-
-    console.log("Logged In User:", req.user);
+    let result;
 
     if (req.user.role === "teacher") {
-      students = await getStudentsByTeacherService(req.user.id);
-    } else {
-      students = await getAllStudentsService();
+      const students = await getStudentsByTeacherService(req.user.id);
+      return res.status(200).json({
+        success: true,
+        data: students,
+      });
     }
 
-    res.status(200).json({
+    result = await getAllStudentsService(req.query);
+
+    return res.status(200).json({
       success: true,
-      data: students,
+      data: result.students,
+      pagination: result.pagination,
     });
   } catch (error) {
     res.status(500).json({
@@ -132,11 +135,12 @@ export const deleteStudentController = async (req, res) => {
 
 export const getStudentsByTeacherController = async (req, res) => {
   try {
-    const students = await getStudentsByTeacherService(req.user.id);
+    const result = await getStudentsByTeacherService(req.user.id, req.query);
 
     res.status(200).json({
       success: true,
-      data: students,
+      data: result.students || result,
+      pagination: result.pagination,
     });
   } catch (error) {
     res.status(500).json({
@@ -152,14 +156,16 @@ export const getStudentsByTeacherController = async (req, res) => {
 
 export const getStudentsByDivisionController = async (req, res) => {
   try {
-    const students = await getStudentsByDivisionService(
+    const result = await getStudentsByDivisionService(
       req.params.divisionId,
-      req.user
+      req.user,
+      req.query
     );
 
     res.status(200).json({
       success: true,
-      data: students,
+      data: result.students || result,
+      pagination: result.pagination,
     });
   } catch (error) {
     res.status(500).json({

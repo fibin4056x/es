@@ -13,16 +13,26 @@ import { generateExportBuffer } from "../utils/export.utils.js";
 ========================================= */
 
 export const exportAllStudentsController = asyncHandler(async (req, res) => {
-  const format = (req.query.format || "csv").toLowerCase();
-  if (!["csv", "xlsx"].includes(format)) {
+  const { format = "csv", classId, divisionId, teacherId, status, academicYear, search } = req.query;
+  const normalizedFormat = String(format).toLowerCase();
+
+  if (!["csv", "xlsx"].includes(normalizedFormat)) {
     throw new ApiError(400, "Invalid format. Supported formats: csv, xlsx");
   }
 
-  const exportResult = await exportAllStudentsService();
+  const exportResult = await exportAllStudentsService({
+    classId,
+    divisionId,
+    teacherId,
+    status,
+    academicYear,
+    search,
+  });
+
   const { buffer, filename, contentType } = await generateExportBuffer({
     metadata: exportResult.metadata,
     data: exportResult.data,
-    format,
+    format: normalizedFormat,
   });
 
   res.setHeader("Content-Type", contentType);
@@ -39,17 +49,25 @@ export const exportAllStudentsController = asyncHandler(async (req, res) => {
 
 export const exportStudentsByClassController = asyncHandler(async (req, res) => {
   const { classId } = req.params;
-  const format = (req.query.format || "csv").toLowerCase();
+  const { format = "csv", divisionId, teacherId, status, academicYear, search } = req.query;
+  const normalizedFormat = String(format).toLowerCase();
 
-  if (!["csv", "xlsx"].includes(format)) {
+  if (!["csv", "xlsx"].includes(normalizedFormat)) {
     throw new ApiError(400, "Invalid format. Supported formats: csv, xlsx");
   }
 
-  const exportResult = await exportStudentsByClassService(classId);
+  const exportResult = await exportStudentsByClassService(classId, {
+    divisionId,
+    teacherId,
+    status,
+    academicYear,
+    search,
+  });
+
   const { buffer, filename, contentType } = await generateExportBuffer({
     metadata: exportResult.metadata,
     data: exportResult.data,
-    format,
+    format: normalizedFormat,
   });
 
   res.setHeader("Content-Type", contentType);
@@ -67,17 +85,25 @@ export const exportStudentsByClassController = asyncHandler(async (req, res) => 
 export const exportStudentsByDivisionController = asyncHandler(
   async (req, res) => {
     const { divisionId } = req.params;
-    const format = (req.query.format || "csv").toLowerCase();
+    const { format = "csv", classId, teacherId, status, academicYear, search } = req.query;
+    const normalizedFormat = String(format).toLowerCase();
 
-    if (!["csv", "xlsx"].includes(format)) {
+    if (!["csv", "xlsx"].includes(normalizedFormat)) {
       throw new ApiError(400, "Invalid format. Supported formats: csv, xlsx");
     }
 
-    const exportResult = await exportStudentsByDivisionService(divisionId);
+    const exportResult = await exportStudentsByDivisionService(divisionId, {
+      classId,
+      teacherId,
+      status,
+      academicYear,
+      search,
+    });
+
     const { buffer, filename, contentType } = await generateExportBuffer({
       metadata: exportResult.metadata,
       data: exportResult.data,
-      format,
+      format: normalizedFormat,
     });
 
     res.setHeader("Content-Type", contentType);
@@ -96,17 +122,25 @@ export const exportStudentsByDivisionController = asyncHandler(
 export const exportStudentsByTeacherController = asyncHandler(
   async (req, res) => {
     const { teacherId } = req.params;
-    const format = (req.query.format || "csv").toLowerCase();
+    const { format = "csv", classId, divisionId, status, academicYear, search } = req.query;
+    const normalizedFormat = String(format).toLowerCase();
 
-    if (!["csv", "xlsx"].includes(format)) {
+    if (!["csv", "xlsx"].includes(normalizedFormat)) {
       throw new ApiError(400, "Invalid format. Supported formats: csv, xlsx");
     }
 
-    const exportResult = await exportStudentsByTeacherService(teacherId);
+    const exportResult = await exportStudentsByTeacherService(teacherId, {
+      classId,
+      divisionId,
+      status,
+      academicYear,
+      search,
+    });
+
     const { buffer, filename, contentType } = await generateExportBuffer({
       metadata: exportResult.metadata,
       data: exportResult.data,
-      format,
+      format: normalizedFormat,
     });
 
     res.setHeader("Content-Type", contentType);
