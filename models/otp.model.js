@@ -27,7 +27,7 @@ const otpSchema = new mongoose.Schema(
       index: true,
     },
 
-    // Never store the plaintext OTP.
+    // Never store plaintext OTP.
     otpHash: {
       type: String,
       required: true,
@@ -37,7 +37,6 @@ const otpSchema = new mongoose.Schema(
     expiresAt: {
       type: Date,
       required: true,
-      index: true,
     },
 
     attempts: {
@@ -79,13 +78,13 @@ const otpSchema = new mongoose.Schema(
   }
 );
 
-// OTP automatically disappears after expiration.
+// TTL index: MongoDB automatically removes expired OTPs.
 otpSchema.index(
   { expiresAt: 1 },
   { expireAfterSeconds: 0 }
 );
 
-// Main verification lookup.
+// Main OTP verification lookup.
 otpSchema.index({
   email: 1,
   purpose: 1,
@@ -93,7 +92,7 @@ otpSchema.index({
   expiresAt: 1,
 });
 
-// User + purpose lookup for invalidating old OTPs.
+// User + purpose lookup for invalidating previous OTPs.
 otpSchema.index({
   userId: 1,
   purpose: 1,

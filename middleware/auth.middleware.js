@@ -22,17 +22,16 @@ export const authenticate = async (req, res, next) => {
     const token = getBearerToken(req);
 
     if (!token) {
-      throw new ApiError(
-        401,
-        "Authentication required."
-      );
+      throw new ApiError(401, "Authentication required.");
     }
 
     const decoded = verifyAccessToken(token);
 
-    const user = await validateUserFromToken(
-      decoded.sub
-    );
+    const user = await validateUserFromToken(decoded.sub);
+
+    if (!user) {
+      throw new ApiError(401, "Authentication required.");
+    }
 
     req.user = user;
 

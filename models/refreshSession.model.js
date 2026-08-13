@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 /* ============================================================
    REFRESH SESSION SCHEMA
-   ============================================================ */
+============================================================ */
 
 const refreshSessionSchema = new mongoose.Schema(
   {
@@ -13,7 +13,8 @@ const refreshSessionSchema = new mongoose.Schema(
       index: true,
     },
 
-    // Hashed refresh token to prevent database leak compromise
+    // Hashed refresh token.
+    // Never store the raw refresh token in MongoDB.
     tokenHash: {
       type: String,
       required: [true, "Token hash is required"],
@@ -42,7 +43,6 @@ const refreshSessionSchema = new mongoose.Schema(
     expiresAt: {
       type: Date,
       required: [true, "Expiration date is required"],
-      index: true,
     },
 
     revokedAt: {
@@ -63,23 +63,23 @@ const refreshSessionSchema = new mongoose.Schema(
 
 /* ============================================================
    INDEXES & TTL
-   ============================================================ */
+============================================================ */
 
-// Automatic cleanup of expired sessions by MongoDB
+// Automatically remove expired sessions.
 refreshSessionSchema.index(
   { expiresAt: 1 },
   { expireAfterSeconds: 0 }
 );
 
-// Fast session lookup for active user sessions
+// Fast lookup for user's active sessions.
 refreshSessionSchema.index({
   userId: 1,
   isRevoked: 1,
 });
 
 /* ============================================================
-   METHODS & STATICS
-   ============================================================ */
+   METHODS
+============================================================ */
 
 refreshSessionSchema.methods.isSessionValid = function () {
   return !this.isRevoked && this.expiresAt > new Date();
