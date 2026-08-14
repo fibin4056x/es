@@ -268,10 +268,17 @@ export const loginService = async ({
       );
     }
 
-    await generateAndSendOtp(
-      user,
-      OTP_PURPOSES.FIRST_LOGIN
-    );
+    try {
+      await generateAndSendOtp(
+        user,
+        OTP_PURPOSES.FIRST_LOGIN
+      );
+    } catch (otpErr) {
+      throw new ApiError(
+        otpErr.statusCode || 500,
+        otpErr.message || "Failed to send verification email. Please try again or contact administrator."
+      );
+    }
 
     return {
       requiresVerification: true,

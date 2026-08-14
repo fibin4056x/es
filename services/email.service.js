@@ -21,16 +21,14 @@ const getTransporter = () => {
   transporter = nodemailer.createTransport({
     host: ENV.EMAIL_HOST,
     port: Number(ENV.EMAIL_PORT) || 587,
-
-    // Gmail SMTP:
-    // 587 -> false
-    // 465 -> true
     secure: Number(ENV.EMAIL_PORT) === 465,
-
     auth: {
       user: ENV.EMAIL_USER,
       pass: ENV.EMAIL_PASS,
     },
+    connectionTimeout: 5000,
+    greetingTimeout: 5000,
+    socketTimeout: 5000,
   });
 
   return transporter;

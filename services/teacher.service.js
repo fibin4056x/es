@@ -18,9 +18,9 @@ export const createTeacherService = async (teacherData) => {
     email,
     role: "teacher",
     isActive: true,
-    emailVerified: false,
-    firstLoginCompleted: false,
-    status: "pending_verification",
+    emailVerified: teacherData.emailVerified !== undefined ? teacherData.emailVerified : true,
+    firstLoginCompleted: teacherData.firstLoginCompleted !== undefined ? teacherData.firstLoginCompleted : true,
+    status: teacherData.status || "active",
   });
 
   // Send welcome notification email asynchronously
