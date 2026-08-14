@@ -13,6 +13,7 @@ import {
   createReportService,
   getInboxReportsService,
   getSentReportsService,
+  getAllReportsService,
   getReportByIdService,
   markReportReadService,
   deleteReportService,
@@ -177,16 +178,33 @@ export const createReportController = asyncHandler(async (req, res) => {
 
   return res
     .status(201)
-    .json(new ApiResponse(201, report, "Report sent successfully."));
+    .json(new ApiResponse(201, report, "Report created successfully."));
 });
 
 /* =========================================
-   8. GET REPORT INBOX
+   8. GET ALL REPORTS
+   GET /api/reports
+========================================= */
+
+export const getAllReportsController = asyncHandler(async (req, res) => {
+  const result = await getAllReportsService(req.user, req.query);
+
+  return res.status(200).json({
+    success: true,
+    message: "Reports fetched successfully.",
+    items: result.items,
+    data: result.items,
+    pagination: result.pagination,
+  });
+});
+
+/* =========================================
+   9. GET REPORT INBOX
    GET /api/reports/inbox
 ========================================= */
 
 export const getInboxReportsController = asyncHandler(async (req, res) => {
-  const result = await getInboxReportsService(req.user.id, req.query);
+  const result = await getInboxReportsService(req.user.id, req.query, req.user.role);
 
   return res.status(200).json({
     success: true,
@@ -198,12 +216,12 @@ export const getInboxReportsController = asyncHandler(async (req, res) => {
 });
 
 /* =========================================
-   9. GET REPORT SENT
+   10. GET REPORT SENT
    GET /api/reports/sent
 ========================================= */
 
 export const getSentReportsController = asyncHandler(async (req, res) => {
-  const result = await getSentReportsService(req.user.id, req.query);
+  const result = await getSentReportsService(req.user.id, req.query, req.user.role);
 
   return res.status(200).json({
     success: true,

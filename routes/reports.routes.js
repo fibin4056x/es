@@ -8,6 +8,7 @@ import {
   getSchoolAttendanceReportController,
   getStudentAttendanceHistoryController,
   createReportController,
+  getAllReportsController,
   getInboxReportsController,
   getSentReportsController,
   getReportByIdController,
@@ -66,6 +67,12 @@ router.get(
 ========================================= */
 
 // Fixed paths first
+router.get(
+  "/",
+  authorize("principal", "teacher"),
+  getAllReportsController
+);
+
 router.get(
   "/inbox",
   authorize("principal", "teacher"),
