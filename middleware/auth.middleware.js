@@ -3,22 +3,27 @@ import { verifyAccessToken } from "../validations/auth.tokens.js";
 import { validateUserFromToken } from "../services/auth.service.js";
 
 const getBearerToken = (req) => {
-  const authorization =
-    req.headers.authorization;
-
-  if (
-    typeof authorization !== "string" ||
-    !authorization.startsWith("Bearer ")
-  ) {
-    return null;
+  // 1. Check HttpOnly cookie accessToken
+  if (req.cookies?.accessToken) {
+    return req.cookies.accessToken;
   }
 
-  const token =
-    authorization
-      .slice(7)
-      .trim();
+  // 2. Check HttpOnly cookie token
+  if (req.cookies?.token) {
+    return req.cookies.token;
+  }
 
-  return token || null;
+  // 3. Check Authorization: Bearer header
+  const authorization = req.headers.authorization;
+  if (
+    typeof authorization === "string" &&
+    authorization.startsWith("Bearer ")
+  ) {
+    const token = authorization.slice(7).trim();
+    if (token) return token;
+  }
+
+  return null;
 };
 
 export const authenticate = async (
@@ -37,8 +42,15 @@ export const authenticate = async (
       );
     }
 
-    const decoded =
-      verifyAccessToken(token);
+    let decoded;
+    try {
+      decoded = verifyAccessToken(token);
+    } catch (err) {
+      if (err.message === "TOKEN_EXPIRED" || err.name === "TokenExpiredError") {
+        throw new ApiError(401, "Access token expired.");
+      }
+      throw new ApiError(401, err.message || "Invalid authentication token.");
+    }
 
     if (!decoded?.sub) {
       throw new ApiError(

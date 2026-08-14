@@ -269,7 +269,7 @@ export const verifyOtp = async (
       {
         new: true,
       }
-    );
+    ).select("+otpHash");
 
   if (!otpRecord) {
     // Determine whether an OTP exists but has exceeded attempts.
@@ -315,6 +315,13 @@ export const verifyOtp = async (
   // ----------------------------------------------------------
   // COMPARE OTP
   // ----------------------------------------------------------
+
+  if (!otpRecord.otpHash) {
+    throw new ApiError(
+      400,
+      "Invalid verification code."
+    );
+  }
 
   const isValid = await bcrypt.compare(
     cleanOtp,

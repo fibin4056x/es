@@ -274,7 +274,12 @@ export const getReportByIdService = async (reportId, userId, userRole) => {
    MARK REPORT READ
 ========================================= */
 
-export const markReportReadService = async (reportId, userId, isRead = true) => {
+export const markReportReadService = async (
+  reportId,
+  userId,
+  isRead = true,
+  userRole = ""
+) => {
   if (!mongoose.Types.ObjectId.isValid(reportId)) {
     throw new ApiError(400, "Invalid Report ID.");
   }
@@ -285,9 +290,11 @@ export const markReportReadService = async (reportId, userId, isRead = true) => 
     throw new ApiError(404, "Report not found.");
   }
 
+  const isSender = report.senderId.toString() === userId.toString();
   const isRecipient = report.recipientId.toString() === userId.toString();
-  if (!isRecipient) {
-    throw new ApiError(403, "Only the recipient can mark this report as read.");
+
+  if (!isRecipient && !isSender && userRole !== "principal") {
+    throw new ApiError(403, "Access forbidden to update this report status.");
   }
 
   report.isRead = Boolean(isRead);

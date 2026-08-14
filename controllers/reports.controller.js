@@ -237,11 +237,11 @@ export const markReportReadController = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const isRead = req.body.isRead !== undefined ? req.body.isRead : true;
 
-  const report = await markReportReadService(id, req.user.id, isRead);
+  const report = await markReportReadService(id, req.user.id, isRead, req.user.role);
 
   return res
     .status(200)
-    .json(new ApiResponse(200, report, "Report marked as read status updated."));
+    .json(new ApiResponse(200, report, "Report read status updated successfully."));
 });
 
 /* =========================================

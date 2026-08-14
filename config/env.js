@@ -448,6 +448,9 @@ if (!COOKIE_HTTP_ONLY) {
 const REFRESH_COOKIE_MAX_AGE =
   7 * 24 * 60 * 60 * 1000;
 
+const ACCESS_COOKIE_MAX_AGE =
+  15 * 60 * 1000;
+
 // ============================================================
 // PROXY
 // ============================================================
@@ -558,6 +561,7 @@ export const ENV = Object.freeze({
   COOKIE_SECURE,
   COOKIE_HTTP_ONLY,
   REFRESH_COOKIE_MAX_AGE,
+  ACCESS_COOKIE_MAX_AGE,
 
   // ----------------------------------------------------------
   // SECURITY

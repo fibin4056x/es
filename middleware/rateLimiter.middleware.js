@@ -22,6 +22,7 @@ export const createRateLimiter = ({
   message = "Too many requests. Please try again later.",
 } = {}) => {
   return (req, res, next) => {
+    const effectiveMax = process.env.NODE_ENV === "production" ? max : Math.max(max, 100);
     const ip = req.ip || req.headers["x-forwarded-for"] || "global";
     const key = `${req.baseUrl}${req.path}_${ip}`;
     const now = Date.now();
@@ -39,7 +40,7 @@ export const createRateLimiter = ({
 
     record.count += 1;
 
-    if (record.count > max) {
+    if (record.count > effectiveMax) {
       const waitMinutes = Math.ceil((record.resetTime - now) / (60 * 1000));
       return next(
         new ApiError(

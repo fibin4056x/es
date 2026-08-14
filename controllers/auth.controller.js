@@ -18,7 +18,16 @@ import {
   resetPasswordService,
 } from "../services/auth.service.js";
 
-const getCookieOptions = () => ({
+const getAccessTokenCookieOptions = () => ({
+  httpOnly: ENV.COOKIE_HTTP_ONLY,
+  secure: ENV.COOKIE_SECURE,
+  sameSite: ENV.COOKIE_SAME_SITE,
+  domain: ENV.COOKIE_DOMAIN || undefined,
+  maxAge: ENV.ACCESS_COOKIE_MAX_AGE || 15 * 60 * 1000,
+  path: "/",
+});
+
+const getRefreshTokenCookieOptions = () => ({
   httpOnly: ENV.COOKIE_HTTP_ONLY,
   secure: ENV.COOKIE_SECURE,
   sameSite: ENV.COOKIE_SAME_SITE,
@@ -26,6 +35,9 @@ const getCookieOptions = () => ({
   maxAge: ENV.REFRESH_COOKIE_MAX_AGE,
   path: "/api/auth",
 });
+
+// Backward compatible alias
+const getCookieOptions = getRefreshTokenCookieOptions;
 
 // ============================================================
 // LOGIN
@@ -39,8 +51,13 @@ export const login = asyncHandler(async (req, res) => {
     userAgent: req.get("user-agent") || "",
   });
 
+  const accessToken = data.accessToken || data.token;
+  if (accessToken) {
+    res.cookie("accessToken", accessToken, getAccessTokenCookieOptions());
+  }
+
   if (data.refreshToken) {
-    res.cookie("refreshToken", data.refreshToken, getCookieOptions());
+    res.cookie("refreshToken", data.refreshToken, getRefreshTokenCookieOptions());
     delete data.refreshToken;
   }
 
@@ -75,8 +92,13 @@ export const refreshAccessToken = asyncHandler(
       userAgent: req.get("user-agent") || "",
     });
 
+    const accessToken = data.accessToken || data.token;
+    if (accessToken) {
+      res.cookie("accessToken", accessToken, getAccessTokenCookieOptions());
+    }
+
     if (data.refreshToken) {
-      res.cookie("refreshToken", data.refreshToken, getCookieOptions());
+      res.cookie("refreshToken", data.refreshToken, getRefreshTokenCookieOptions());
       delete data.refreshToken;
     }
 
@@ -107,9 +129,14 @@ export const logout = asyncHandler(
       });
     }
 
+    res.clearCookie("accessToken", {
+      ...getAccessTokenCookieOptions(),
+      maxAge: 0,
+    });
+
     res.clearCookie("refreshToken", {
-      ...getCookieOptions(),
-      maxAge: undefined,
+      ...getRefreshTokenCookieOptions(),
+      maxAge: 0,
     });
 
     return res.status(200).json(
@@ -242,26 +269,17 @@ export const verifyTeacherOtp =
 
 export const completeFirstLogin =
   asyncHandler(async (req, res) => {
-    const authHeader =
-      req.headers.authorization;
+    let setupToken = req.body?.setupToken || req.cookies?.setupToken;
+    const authHeader = req.headers.authorization;
 
-    if (
-      typeof authHeader !== "string" ||
-      !authHeader.startsWith("Bearer ")
-    ) {
-      throw new ApiError(
-        401,
-        "Setup authorization token is required."
-      );
+    if (!setupToken && typeof authHeader === "string" && authHeader.startsWith("Bearer ")) {
+      setupToken = authHeader.slice(7).trim();
     }
-
-    const setupToken =
-      authHeader.slice(7).trim();
 
     if (!setupToken) {
       throw new ApiError(
         401,
-        "Invalid setup authorization token."
+        "Setup authorization token is required."
       );
     }
 
@@ -276,6 +294,15 @@ export const completeFirstLogin =
         newPassword,
         confirmPassword
       );
+
+    if (data.accessToken) {
+      res.cookie("accessToken", data.accessToken, getAccessTokenCookieOptions());
+    }
+
+    if (data.refreshToken) {
+      res.cookie("refreshToken", data.refreshToken, getRefreshTokenCookieOptions());
+      delete data.refreshToken;
+    }
 
     return res.status(200).json(
       new ApiResponse(

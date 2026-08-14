@@ -22,12 +22,9 @@ export const createTeacherService = async (teacherData) => {
     status: "pending_verification",
   });
 
-  // Optionally send welcome notification email
-  try {
-    await sendTeacherAccountCreatedEmail({ to: teacher.email, name: teacher.name });
-  } catch (err) {
-    console.error("Welcome email warning:", err.message);
-  }
+  // Send welcome notification email asynchronously
+  sendTeacherAccountCreatedEmail({ to: teacher.email, name: teacher.name })
+    .catch((err) => console.error("Welcome email warning:", err.message));
 
   return teacher;
 };

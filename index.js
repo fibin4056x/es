@@ -14,15 +14,15 @@ const startServer = async () => {
 
     console.log("✅ Database connection ready");
 
-    // Verify Gmail SMTP
-    await verifyEmailConnection();
-
-    console.log("📧 Email service ready");
-
     // Start Express server
     server = app.listen(PORT, "0.0.0.0", () => {
       console.log(`🚀 Server running on port ${PORT} (0.0.0.0)`);
     });
+
+    // Verify Gmail SMTP asynchronously
+    verifyEmailConnection()
+      .then(() => console.log("📧 Email service ready"))
+      .catch((err) => console.error("⚠️ Email service warning:", err.message));
   } catch (error) {
     console.error("❌ Server startup failed:");
     console.error(error.message);
