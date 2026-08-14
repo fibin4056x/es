@@ -27,13 +27,13 @@ router.use(authenticate);
 
 router.get(
   "/attendance/daily",
-  authorize("principal"),
+  authorize("principal", "teacher"),
   getDailyAttendanceReportController
 );
 
 router.get(
   "/attendance/monthly",
-  authorize("principal"),
+  authorize("principal", "teacher"),
   getMonthlyAttendanceReportController
 );
 
@@ -45,7 +45,7 @@ router.get(
 
 router.get(
   "/attendance/class/:classId",
-  authorize("principal"),
+  authorize("principal", "teacher"),
   getClassAttendanceReportController
 );
 

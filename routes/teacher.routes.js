@@ -40,7 +40,7 @@ router.post(
 router.get(
   "/",
   authenticate,
-  authorize("principal"),
+  authorize("principal", "teacher"),
   getAllTeachers
 );
 
@@ -49,7 +49,7 @@ router.get(
 router.get(
   "/:id",
   authenticate,
- authorize("principal"),
+ authorize("principal", "teacher"),
   getTeacherById
 );
   router.patch(

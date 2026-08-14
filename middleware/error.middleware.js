@@ -168,7 +168,7 @@ export const errorHandler = (err, req, res, next) => {
      CORS ERROR
   ============================================================ */
 
-  if (err?.message === "CORS blocked") {
+  if (err?.message && String(err.message).includes("CORS blocked")) {
     return res.status(403).json({
       success: false,
       message: "Origin is not allowed.",

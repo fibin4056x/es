@@ -154,19 +154,15 @@ export const markAttendanceService = async (
   }
 
   /* =========================================
-     VALIDATE STATUS & REASON
+     VALIDATE STATUS
   ========================================= */
 
+  const validStatuses = ["present", "absent", "late", "leave"];
   for (const student of students) {
-    if (
-      ["absent", "late", "leave"].includes(
-        student.status
-      ) &&
-      !student.reason?.trim()
-    ) {
+    if (!validStatuses.includes(student.status)) {
       throw new ApiError(
         400,
-        `${student.status} requires a reason.`
+        `Invalid attendance status: ${student.status}`
       );
     }
   }
@@ -742,18 +738,8 @@ export const updateAttendanceService = async (
   }
 
   /* =========================================
-     VALIDATE REASON
+     VALIDATE REASON (OPTIONAL)
   ========================================= */
-
-  if (
-    ["absent", "late", "leave"].includes(status) &&
-    !reason?.trim()
-  ) {
-    throw new ApiError(
-      400,
-      `Reason is required for ${status}.`
-    );
-  }
 
   attendance.status = status;
   attendance.reason =

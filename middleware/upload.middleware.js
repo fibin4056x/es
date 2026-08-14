@@ -4,6 +4,7 @@ import cloudinary from "../config/cloudinary.js";
 
 const allowedMimes = [
   "application/pdf",
+  "application/x-pdf",
   "image/jpeg",
   "image/jpg",
   "image/png",
@@ -12,13 +13,19 @@ const allowedMimes = [
 const storage = new CloudinaryStorage({
   cloudinary,
   params: async (req, file) => {
-    const isPdf = file.mimetype === "application/pdf";
-    const sanitizedOriginalName = file.originalname.replace(/\.[^/.]+$/, "");
+    const isPdf =
+      file.mimetype === "application/pdf" ||
+      file.mimetype === "application/x-pdf" ||
+      file.originalname.toLowerCase().endsWith(".pdf");
+    const sanitizedOriginalName = file.originalname
+      .replace(/\.[^/.]+$/, "")
+      .replace(/[^a-zA-Z0-9_-]/g, "_");
     
+    const extension = isPdf ? ".pdf" : "";
     return {
       folder: "slms-documents",
       resource_type: isPdf ? "raw" : "image",
-      public_id: `${Date.now()}-${sanitizedOriginalName}`,
+      public_id: `${Date.now()}-${sanitizedOriginalName}${extension}`,
     };
   },
 });

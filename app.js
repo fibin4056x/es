@@ -41,6 +41,7 @@ app.use(cookieParser());
 const rawOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
+  "https://es1-beta.vercel.app",
   ENV.CLIENT_ORIGIN,
 ].filter(Boolean);
 

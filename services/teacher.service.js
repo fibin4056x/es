@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import User from "../models/user.model.js";
 import DivisionModel from "../models/division.model.js";
 import bcrypt from "bcryptjs";
@@ -68,6 +69,10 @@ export const getAllTeacherService = async (options = {}) => {
 };
 
 export const getTeacherByIdService = async (teacherId) => {
+  if (!teacherId || !mongoose.Types.ObjectId.isValid(teacherId)) {
+    throw new ApiError(400, "Invalid Teacher ID");
+  }
+
   const teacher = await User.findOne({
     _id: teacherId,
     role: "teacher",
