@@ -58,7 +58,6 @@ export const login = asyncHandler(async (req, res) => {
 
   if (data.refreshToken) {
     res.cookie("refreshToken", data.refreshToken, getRefreshTokenCookieOptions());
-    delete data.refreshToken;
   }
 
   return res.status(200).json(
@@ -77,7 +76,10 @@ export const login = asyncHandler(async (req, res) => {
 
 export const refreshAccessToken = asyncHandler(
   async (req, res) => {
-    const refreshToken = req.cookies?.refreshToken;
+    const refreshToken =
+      req.body?.refreshToken ||
+      req.cookies?.refreshToken ||
+      (typeof req.headers["x-refresh-token"] === "string" ? req.headers["x-refresh-token"] : null);
 
     if (!refreshToken) {
       throw new ApiError(
@@ -99,7 +101,6 @@ export const refreshAccessToken = asyncHandler(
 
     if (data.refreshToken) {
       res.cookie("refreshToken", data.refreshToken, getRefreshTokenCookieOptions());
-      delete data.refreshToken;
     }
 
     return res.status(200).json(

@@ -3,17 +3,7 @@ import { verifyAccessToken } from "../validations/auth.tokens.js";
 import { validateUserFromToken } from "../services/auth.service.js";
 
 const getBearerToken = (req) => {
-  // 1. Check HttpOnly cookie accessToken
-  if (req.cookies?.accessToken) {
-    return req.cookies.accessToken;
-  }
-
-  // 2. Check HttpOnly cookie token
-  if (req.cookies?.token) {
-    return req.cookies.token;
-  }
-
-  // 3. Check Authorization: Bearer header
+  // 1. Check Authorization: Bearer header (Primary for SPA / cross-domain)
   const authorization = req.headers.authorization;
   if (
     typeof authorization === "string" &&
@@ -21,6 +11,16 @@ const getBearerToken = (req) => {
   ) {
     const token = authorization.slice(7).trim();
     if (token) return token;
+  }
+
+  // 2. Check HttpOnly cookie accessToken
+  if (req.cookies?.accessToken) {
+    return req.cookies.accessToken;
+  }
+
+  // 3. Check HttpOnly cookie token
+  if (req.cookies?.token) {
+    return req.cookies.token;
   }
 
   return null;

@@ -38,14 +38,16 @@ app.use(cookieParser());
    CORS
 ============================================================ */
 
-const allowedOrigins = [
-  // Local development
+const rawOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
-
-  // Production frontend
   ENV.CLIENT_ORIGIN,
 ].filter(Boolean);
+
+const allowedOrigins = rawOrigins
+  .flatMap((origin) => String(origin).split(","))
+  .map((origin) => origin.trim().replace(/\/+$/, ""))
+  .filter(Boolean);
 
 app.use(
   cors({
@@ -55,13 +57,14 @@ app.use(
         return callback(null, true);
       }
 
-      if (allowedOrigins.includes(origin)) {
+      const normalizedOrigin = origin.replace(/\/+$/, "");
+      if (allowedOrigins.includes(normalizedOrigin)) {
         return callback(null, true);
       }
 
       console.warn(`CORS blocked origin: ${origin}`);
 
-      return callback(new Error("CORS blocked"));
+      return callback(new Error(`CORS blocked origin: ${origin}`));
     },
 
     credentials: true,
