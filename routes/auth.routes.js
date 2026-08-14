@@ -2,6 +2,8 @@ import express from "express";
 
 import {
   login,
+  verifyLoginOtp,
+  resendLoginOtp,
   refreshAccessToken,
   logout,
   getMe,
@@ -30,13 +32,20 @@ const router = express.Router();
 
 router.post(
   "/login",
-  (req, res, next) => {
-    console.log("🔥 LOGIN ROUTE HIT");
-    console.log("BODY:", req.body);
-    next();
-  },
   authRateLimiter,
   login
+);
+
+router.post(
+  "/verify-otp",
+  otpRateLimiter,
+  verifyLoginOtp
+);
+
+router.post(
+  "/resend-otp",
+  otpRateLimiter,
+  resendLoginOtp
 );
 
 router.post(

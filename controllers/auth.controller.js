@@ -5,6 +5,8 @@ import { ENV } from "../config/env.js";
 
 import {
   loginService,
+  verifyLoginOtpService,
+  resendLoginOtpService,
   logoutService,
   refreshAccessTokenService,
   getMeService,
@@ -40,12 +42,33 @@ const getRefreshTokenCookieOptions = () => ({
 const getCookieOptions = getRefreshTokenCookieOptions;
 
 // ============================================================
-// LOGIN
+// LOGIN - STEP 1 (Credentials & OTP Generation)
 // POST /api/auth/login
 // ============================================================
 
 export const login = asyncHandler(async (req, res) => {
   const data = await loginService({
+    ...req.body,
+    ipAddress: req.ip,
+    userAgent: req.get("user-agent") || "",
+  });
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      data,
+      data.message || "Verification code sent to your registered email."
+    )
+  );
+});
+
+// ============================================================
+// VERIFY LOGIN OTP - STEP 2 (OTP Verification & Token Issuance)
+// POST /api/auth/verify-otp
+// ============================================================
+
+export const verifyLoginOtp = asyncHandler(async (req, res) => {
+  const data = await verifyLoginOtpService({
     ...req.body,
     ipAddress: req.ip,
     userAgent: req.get("user-agent") || "",
@@ -65,6 +88,25 @@ export const login = asyncHandler(async (req, res) => {
       200,
       data,
       data.message || "Login successful"
+    )
+  );
+});
+
+// ============================================================
+// RESEND LOGIN OTP
+// POST /api/auth/resend-otp
+// ============================================================
+
+export const resendLoginOtp = asyncHandler(async (req, res) => {
+  const data = await resendLoginOtpService({
+    email: req.body?.email,
+  });
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      data,
+      data.message || "New verification code sent"
     )
   );
 });

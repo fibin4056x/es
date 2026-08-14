@@ -35,6 +35,7 @@ import {
 const MIN_PASSWORD_LENGTH = 8;
 
 const OTP_PURPOSES = Object.freeze({
+  LOGIN: "LOGIN",
   FIRST_LOGIN: "FIRST_LOGIN",
   PASSWORD_RESET: "PASSWORD_RESET",
 });
@@ -238,8 +239,135 @@ export const loginService = async ({
   console.log(`[PASSWORD_MATCH] Success for user ${user._id}`);
 
   // ----------------------------------------------------------
-  // TEACHER FIRST LOGIN
+  // ACCOUNT STATE CHECK
   // ----------------------------------------------------------
+
+  if (user.isDeleted) {
+    throw new ApiError(
+      403,
+      "Your account is no longer available."
+    );
+  }
+
+  if (!user.isActive) {
+    throw new ApiError(
+      403,
+      "Your account is inactive."
+    );
+  }
+
+  // Determine OTP Purpose
+  const requiresFirstLogin =
+    user.role === ROLES.TEACHER &&
+    (
+      !user.emailVerified ||
+      !user.firstLoginCompleted ||
+      user.status === "pending_verification"
+    );
+
+  const otpPurpose = requiresFirstLogin
+    ? OTP_PURPOSES.FIRST_LOGIN
+    : OTP_PURPOSES.LOGIN;
+
+  // ----------------------------------------------------------
+  // GENERATE AND DISPATCH OTP
+  // ----------------------------------------------------------
+
+  try {
+    await generateAndSendOtp(user, otpPurpose);
+  } catch (otpErr) {
+    console.error("❌ OTP Email Dispatch Failed:", otpErr.message);
+    throw new ApiError(
+      otpErr.statusCode || 500,
+      otpErr.message || "Failed to send verification code. Please check email service configuration."
+    );
+  }
+
+  return {
+    success: true,
+    requiresOtp: true,
+    requiresVerification: true,
+    otpRequired: true,
+    email: user.email,
+    message: "Verification code sent to your registered email.",
+  };
+};
+
+// ============================================================
+// VERIFY LOGIN OTP
+// ============================================================
+
+export const verifyLoginOtpService = async ({
+  email,
+  otp,
+  ipAddress = "",
+  userAgent = "",
+}) => {
+  const normalizedEmail = normalizeEmail(email);
+
+  let otpResult;
+  try {
+    otpResult = await verifyOtp(normalizedEmail, otp, OTP_PURPOSES.LOGIN);
+  } catch (err) {
+    // Fall back to FIRST_LOGIN purpose if needed
+    try {
+      otpResult = await verifyOtp(normalizedEmail, otp, OTP_PURPOSES.FIRST_LOGIN);
+    } catch {
+      throw err;
+    }
+  }
+
+  const user = await User.findOne({
+    _id: otpResult.userId,
+    isDeleted: false,
+  });
+
+  ensureActiveUser(user);
+
+  user.emailVerified = true;
+  user.firstLoginCompleted = true;
+  if (user.status === "pending_verification") {
+    user.status = "active";
+  }
+  user.lastLogin = new Date();
+
+  await user.save();
+
+  const accessToken = generateAccessToken(user);
+  const refreshToken = generateRefreshToken(user);
+  const tokenHash = hashToken(refreshToken);
+
+  await RefreshSession.create({
+    userId: user._id,
+    tokenHash,
+    ipAddress,
+    userAgent,
+    expiresAt: new Date(
+      Date.now() + ENV.REFRESH_COOKIE_MAX_AGE
+    ),
+  });
+
+  return {
+    message: "Login successful.",
+    token: accessToken,
+    refreshToken,
+    user: buildUser(user),
+  };
+};
+
+// ============================================================
+// RESEND LOGIN OTP
+// ============================================================
+
+export const resendLoginOtpService = async ({ email }) => {
+  const normalizedEmail = normalizeEmail(email);
+
+  const user = await User.findOne({
+    email: normalizedEmail,
+    isDeleted: false,
+  });
+
+  ensureActiveUser(user);
 
   const requiresFirstLogin =
     user.role === ROLES.TEACHER &&
@@ -249,101 +377,23 @@ export const loginService = async ({
       user.status === "pending_verification"
     );
 
-  if (requiresFirstLogin) {
-    // Do not allow disabled/suspended teachers
-    // to use the first-login flow.
-    if (user.isDeleted) {
-      throw new ApiError(
-        403,
-        "Your account is no longer available."
-      );
-    }
+  const otpPurpose = requiresFirstLogin
+    ? OTP_PURPOSES.FIRST_LOGIN
+    : OTP_PURPOSES.LOGIN;
 
-    if (!user.isActive) {
-      throw new ApiError(
-        403,
-        "Your account is inactive."
-      );
-    }
-
-    if (
-      user.status !== "pending_verification" &&
-      user.status !== "active"
-    ) {
-      throw new ApiError(
-        403,
-        "Your account is not eligible for first-login verification."
-      );
-    }
-
-    try {
-      await generateAndSendOtp(
-        user,
-        OTP_PURPOSES.FIRST_LOGIN
-      );
-
-      return {
-        requiresVerification: true,
-        email: user.email,
-        message:
-          "Verification required. A verification code has been sent to your email.",
-      };
-    } catch (otpErr) {
-      console.error("⚠️ SMTP/OTP dispatch unavailable, auto-activating verified teacher session:", otpErr.message);
-      user.emailVerified = true;
-      user.firstLoginCompleted = true;
-      user.status = "active";
-      await user.save();
-    }
+  try {
+    await generateAndSendOtp(user, otpPurpose);
+  } catch (otpErr) {
+    console.error("❌ Resend OTP Email Failed:", otpErr.message);
+    throw new ApiError(
+      otpErr.statusCode || 500,
+      otpErr.message || "Failed to resend verification code. Please try again."
+    );
   }
 
-  // ----------------------------------------------------------
-  // ACCOUNT STATE
-  // ----------------------------------------------------------
-
-  ensureActiveUser(user);
-
-  // ----------------------------------------------------------
-  // UPDATE LOGIN
-  // ----------------------------------------------------------
-
-  user.lastLogin = new Date();
-
-  await user.save();
-
-  // ----------------------------------------------------------
-  // TOKEN GENERATION
-  // ----------------------------------------------------------
-
-  const accessToken =
-    generateAccessToken(user);
-
-  const refreshToken =
-    generateRefreshToken(user);
-
-  const tokenHash =
-    hashToken(refreshToken);
-
-  // ----------------------------------------------------------
-  // REFRESH SESSION
-  // ----------------------------------------------------------
-
-  await RefreshSession.create({
-    userId: user._id,
-    tokenHash,
-    ipAddress,
-    userAgent,
-    expiresAt: new Date(
-      Date.now() +
-      ENV.REFRESH_COOKIE_MAX_AGE
-    ),
-  });
-
   return {
-    message: "Login successful.",
-    token: accessToken,
-    refreshToken,
-    user: buildUser(user),
+    success: true,
+    message: "New verification code sent to your registered email.",
   };
 };
 

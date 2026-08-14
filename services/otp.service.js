@@ -7,6 +7,7 @@ import User from "../models/user.model.js";
 import ApiError from "../utils/ApiError.js";
 
 import {
+  sendLoginOtpEmail,
   sendTeacherVerificationOtpEmail,
   sendForgotPasswordOtpEmail,
 } from "./email.service.js";
@@ -22,6 +23,7 @@ const OTP_MAX_ATTEMPTS = 5;
 const BCRYPT_ROUNDS = 10;
 
 const OTP_PURPOSES = Object.freeze({
+  LOGIN: "LOGIN",
   FIRST_LOGIN: "FIRST_LOGIN",
   PASSWORD_RESET: "PASSWORD_RESET",
 });
@@ -181,7 +183,13 @@ export const generateAndSendOtp = async (
   // ----------------------------------------------------------
 
   try {
-    if (purpose === OTP_PURPOSES.FIRST_LOGIN) {
+    if (purpose === OTP_PURPOSES.LOGIN) {
+      await sendLoginOtpEmail({
+        to: email,
+        name: user.name,
+        otp: rawOtp,
+      });
+    } else if (purpose === OTP_PURPOSES.FIRST_LOGIN) {
       await sendTeacherVerificationOtpEmail({
         to: email,
         name: user.name,

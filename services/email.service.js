@@ -108,6 +108,65 @@ export const sendEmail = async ({
    TEACHER FIRST-TIME VERIFICATION OTP
 ========================================================= */
 
+export const sendLoginOtpEmail = async ({
+  to,
+  name,
+  otp,
+}) => {
+  if (!otp) {
+    throw new Error("OTP is required.");
+  }
+
+  const subject = "SLMS - Login Verification Code";
+
+  const text = `
+Hello ${name || "User"},
+
+Your SLMS login verification code is:
+
+${otp}
+
+This code expires in 5 minutes.
+
+Do not share this code with anyone.
+
+Regards,
+SLMS Security Team
+`;
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>SLMS Login Verification</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f5f7fb; font-family: Arial, sans-serif;">
+  <div style="max-width: 600px; margin: 40px auto; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 30px;">
+    <h2 style="color: #4f46e5; margin-bottom: 8px;">School Learning Management System</h2>
+    <h3>Login Verification Code</h3>
+    <p>Hello <strong>${name || "User"}</strong>,</p>
+    <p>Your SLMS login verification code is:</p>
+    <div style="background: #f3f4f6; padding: 18px; text-align: center; border-radius: 8px; margin: 24px 0;">
+      <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #111827;">${otp}</span>
+    </div>
+    <p>This code expires in <strong>5 minutes</strong>.</p>
+    <p style="color: #6b7280; font-size: 13px;">If you did not attempt to log in, please contact your administrator immediately.</p>
+    <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 25px 0;" />
+    <p style="color: #9ca3af; font-size: 12px;">Regards,<br />SLMS Security Team</p>
+  </div>
+</body>
+</html>
+`;
+
+  return sendEmail({
+    to,
+    subject,
+    text,
+    html,
+  });
+};
+
 export const sendTeacherVerificationOtpEmail = async ({
   to,
   name,
