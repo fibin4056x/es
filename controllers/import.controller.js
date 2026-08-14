@@ -16,8 +16,17 @@ export const importStudentsController = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Please upload a valid CSV or Excel (.xlsx, .xls) file");
   }
 
-  const classId = req.query.classId || req.body.classId;
-  const divisionId = req.query.divisionId || req.body.divisionId;
+  const defaultClassId =
+    req.body.defaultClassId ||
+    req.query.defaultClassId ||
+    req.body.classId ||
+    req.query.classId;
+
+  const defaultDivisionId =
+    req.body.defaultDivisionId ||
+    req.query.defaultDivisionId ||
+    req.body.divisionId ||
+    req.query.divisionId;
 
   // Parse uploaded file buffer to structured array of rows
   const parsedRecords = parseImportFile(req.file.buffer);
@@ -26,12 +35,23 @@ export const importStudentsController = asyncHandler(async (req, res) => {
     throw new ApiError(400, "The uploaded file is empty or formatted incorrectly");
   }
 
-  // Execute bulk import service with target class and division options
-  const summary = await importStudentsService(parsedRecords, { classId, divisionId });
+  // Execute bulk import service with target default class and division options
+  const summary = await importStudentsService(parsedRecords, {
+    defaultClassId,
+    defaultDivisionId,
+  });
 
-  return res
-    .status(200)
-    .json(new ApiResponse(200, summary, "Student import completed successfully"));
+  return res.status(200).json({
+    success: true,
+    message: "Student import completed.",
+    totalRows: summary.totalRows,
+    successfullyAdded: summary.successfullyAdded,
+    successCount: summary.successfullyAdded,
+    failed: summary.failed,
+    failedCount: summary.failed,
+    errors: summary.errors,
+    data: summary,
+  });
 });
 
 /* =========================================

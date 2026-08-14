@@ -23,11 +23,13 @@ const HEADER_MAP = {
   "name (english)": "nameEnglish",
   "name english": "nameEnglish",
   "student name": "nameEnglish",
+  "student name (english)": "nameEnglish",
   name: "nameEnglish",
 
   namemalayalam: "nameMalayalam",
   "name (malayalam)": "nameMalayalam",
   "name malayalam": "nameMalayalam",
+  "student name (malayalam)": "nameMalayalam",
 
   gender: "gender",
   sex: "gender",
@@ -42,25 +44,33 @@ const HEADER_MAP = {
   class: "className",
   classname: "className",
   "class name": "className",
+  standard: "className",
+  grade: "className",
 
   division: "divisionName",
   divisionname: "divisionName",
   "division name": "divisionName",
   section: "divisionName",
+  sec: "divisionName",
 
   parentname: "parentName",
   "parent name": "parentName",
   "parent/guardian name": "parentName",
   "guardian name": "parentName",
+  guardian: "parentName",
 
   parentphone: "parentPhone",
   "parent phone": "parentPhone",
   phone: "parentPhone",
   "contact number": "parentPhone",
+  "phone number": "parentPhone",
+  "mobile number": "parentPhone",
   mobile: "parentPhone",
+  contact: "parentPhone",
 
   relation: "guardianRelation",
   "guardian relation": "guardianRelation",
+  relationship: "guardianRelation",
 
   address: "address",
   "residential address": "address",
@@ -68,7 +78,10 @@ const HEADER_MAP = {
   aadhaar: "aadhaarNumber",
   aadhaarnumber: "aadhaarNumber",
   "aadhaar number": "aadhaarNumber",
+  "aadhaar no": "aadhaarNumber",
   aadhar: "aadhaarNumber",
+  aadharno: "aadhaarNumber",
+  "aadhar no": "aadhaarNumber",
 
   economiccategory: "economicCategory",
   "economic category": "economicCategory",
