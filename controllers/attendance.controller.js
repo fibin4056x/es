@@ -149,13 +149,7 @@ export const getDivisionAttendanceController =
 
 export const uploadAttendanceFileController =
   asyncHandler(async (req, res) => {
-     console.log(req.files);
-
     const { id } = req.params;
-
-    /* =========================================
-       VALIDATE REQUEST
-    ========================================= */
 
     if (!id) {
       throw new ApiError(
@@ -164,17 +158,25 @@ export const uploadAttendanceFileController =
       );
     }
 
-    if (!req.files || req.files.length === 0) {
+    const files = req.files
+      ? Array.isArray(req.files)
+        ? req.files
+        : Object.values(req.files).flat()
+      : req.file
+      ? [req.file]
+      : [];
+
+    if (!files || files.length === 0) {
       throw new ApiError(
         400,
-        "Please upload at least one PDF."
+        "Please upload at least one PDF or image document."
       );
     }
 
     const attendance =
       await uploadAttendanceFileService(
         id,
-        req.files,
+        files,
         req.user.id
       );
 
@@ -195,10 +197,6 @@ export const updateAttendanceController =
   asyncHandler(async (req, res) => {
     const { id } = req.params;
 
-    /* =========================================
-       VALIDATE REQUEST
-    ========================================= */
-
     if (!id) {
       throw new ApiError(
         400,
@@ -206,7 +204,15 @@ export const updateAttendanceController =
       );
     }
 
-    if (!req.body || Object.keys(req.body).length === 0) {
+    const files = req.files
+      ? Array.isArray(req.files)
+        ? req.files
+        : Object.values(req.files).flat()
+      : req.file
+      ? [req.file]
+      : [];
+
+    if ((!req.body || Object.keys(req.body).length === 0) && files.length === 0) {
       throw new ApiError(
         400,
         "Attendance update data is required."
@@ -216,8 +222,9 @@ export const updateAttendanceController =
     const attendance =
       await updateAttendanceService(
         id,
-        req.body,
-        req.user.id
+        req.body || {},
+        req.user.id,
+        files
       );
 
     return res.status(200).json(
@@ -229,7 +236,6 @@ export const updateAttendanceController =
     );
   });
 
-
 /* =========================================
    REPLACE ATTENDANCE DOCUMENT
 ========================================= */
@@ -240,10 +246,6 @@ export const replaceAttendanceDocumentController =
       attendanceId,
       documentId,
     } = req.params;
-
-    /* =========================================
-       VALIDATE REQUEST
-    ========================================= */
 
     if (!attendanceId) {
       throw new ApiError(
@@ -259,7 +261,17 @@ export const replaceAttendanceDocumentController =
       );
     }
 
-    if (!req.file) {
+    const files = req.files
+      ? Array.isArray(req.files)
+        ? req.files
+        : Object.values(req.files).flat()
+      : req.file
+      ? [req.file]
+      : [];
+
+    const fileToUse = files[0] || req.file;
+
+    if (!fileToUse) {
       throw new ApiError(
         400,
         "Please upload a document."
@@ -270,7 +282,7 @@ export const replaceAttendanceDocumentController =
       await replaceAttendanceDocumentService(
         attendanceId,
         documentId,
-        req.file,
+        fileToUse,
         req.user.id
       );
 

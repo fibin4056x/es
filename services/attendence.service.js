@@ -577,13 +577,11 @@ export const uploadAttendanceFileService = async (
     });
   }
 
-  await attendance.save();
-
-  return AttendanceModel.findById(
-    attendanceId
-  )
+  const updatedDoc = await AttendanceModel.findById(attendanceId)
     .populate(attendancePopulate)
     .lean();
+
+  return formatAttendanceResponse(updatedDoc);
 };
 
 
@@ -693,67 +691,78 @@ export const deleteAttendanceDocumentService = async (
     .lean();
 };
 
+const formatAttendanceResponse = (attendanceDoc) => {
+  if (!attendanceDoc) return null;
+  const attendance =
+    typeof attendanceDoc.toObject === "function"
+      ? attendanceDoc.toObject()
+      : { ...attendanceDoc };
+
+  const firstDocUrl = attendance.documents?.[0]?.url || null;
+
+  return {
+    ...attendance,
+    file: firstDocUrl,
+    documentUrl: firstDocUrl,
+    attachment: attendance.documents?.[0] || null,
+  };
+};
+
 /* =========================================
    UPDATE ATTENDANCE
 ========================================= */
 
 export const updateAttendanceService = async (
   attendanceId,
-  updateData,
-  userId
+  updateData = {},
+  userId,
+  files = []
 ) => {
-  const {
-    status,
-    reason,
-  } = updateData;
+  const { status, reason } = updateData;
 
-  const attendance =
-    await AttendanceModel.findById(
-      attendanceId
-    );
+  const attendance = await AttendanceModel.findById(attendanceId);
 
   if (!attendance) {
-    throw new ApiError(
-      404,
-      "Attendance record not found."
-    );
+    throw new ApiError(404, "Attendance record not found.");
   }
 
-  /* =========================================
-     VALIDATE STATUS
-  ========================================= */
-
-  const validStatus = [
-    "present",
-    "absent",
-    "late",
-    "leave",
-  ];
-
-  if (!validStatus.includes(status)) {
-    throw new ApiError(
-      400,
-      "Invalid attendance status."
-    );
+  if (status) {
+    const validStatus = ["present", "absent", "late", "leave"];
+    if (!validStatus.includes(status)) {
+      throw new ApiError(400, "Invalid attendance status.");
+    }
+    attendance.status = status;
   }
 
-  /* =========================================
-     VALIDATE REASON (OPTIONAL)
-  ========================================= */
-
-  attendance.status = status;
-  attendance.reason =
-    reason?.trim() || "";
+  if (reason !== undefined) {
+    attendance.reason = typeof reason === "string" ? reason.trim() : "";
+  }
 
   attendance.markedBy = userId;
 
+  if (files && files.length > 0) {
+    for (const file of files) {
+      const exists = attendance.documents.some(
+        (doc) => doc.publicId === file.filename
+      );
+      if (!exists) {
+        attendance.documents.push({
+          url: file.path,
+          publicId: file.filename,
+          fileName: file.originalname,
+          uploadedBy: userId,
+        });
+      }
+    }
+  }
+
   await attendance.save();
 
-  return AttendanceModel.findById(
-    attendanceId
-  )
+  const updatedDoc = await AttendanceModel.findById(attendanceId)
     .populate(attendancePopulate)
     .lean();
+
+  return formatAttendanceResponse(updatedDoc);
 };
 
 

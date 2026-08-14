@@ -95,6 +95,7 @@ router.patch(
     "principal",
     "teacher"
   ),
+  upload.any(),
   updateAttendanceController
 );
 
@@ -109,7 +110,7 @@ router.patch(
     "principal",
     "teacher"
   ),
-  upload.array("document", 10),
+  upload.any(),
   uploadAttendanceFileController
 );
 
@@ -124,7 +125,7 @@ router.patch(
     "principal",
     "teacher"
   ),
-  upload.single("document"),
+  upload.any(),
   replaceAttendanceDocumentController
 );
 

@@ -150,6 +150,17 @@ export const errorHandler = (err, req, res, next) => {
      MULTER ERRORS
   ============================================================ */
 
+  if (
+    err?.message &&
+    (err.message.includes("Only PDF, JPG") ||
+      err.message.includes("unsupported file type"))
+  ) {
+    return res.status(415).json({
+      success: false,
+      message: err.message,
+    });
+  }
+
   if (err?.name === "MulterError") {
     if (err.code === "LIMIT_FILE_SIZE") {
       return res.status(413).json({

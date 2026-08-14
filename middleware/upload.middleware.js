@@ -31,7 +31,8 @@ const storage = new CloudinaryStorage({
 });
 
 const fileFilter = (req, file, cb) => {
-  if (!allowedMimes.includes(file.mimetype)) {
+  const isPdfByExtension = file.originalname && file.originalname.toLowerCase().endsWith(".pdf");
+  if (!allowedMimes.includes(file.mimetype) && !isPdfByExtension) {
     return cb(
       new Error("Only PDF, JPG, JPEG, and PNG files are allowed."),
       false
