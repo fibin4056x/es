@@ -22,7 +22,16 @@ if (ENV.TRUST_PROXY) {
    SECURITY
 ============================================================ */
 
-app.use(helmet());
+app.disable("x-powered-by");
+
+app.use(
+  helmet({
+    crossOriginResourcePolicy: {
+      policy: "cross-origin",
+    },
+  })
+);
+
 app.use(cookieParser());
 
 /* ============================================================
@@ -30,16 +39,18 @@ app.use(cookieParser());
 ============================================================ */
 
 const allowedOrigins = [
+  // Local development
   "http://localhost:5173",
   "http://127.0.0.1:5173",
+
+  // Production frontend
   ENV.CLIENT_ORIGIN,
 ].filter(Boolean);
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests without an Origin header
-      // such as server-to-server/health-check requests.
+      // Allow server-to-server / health-check requests
       if (!origin) {
         return callback(null, true);
       }
@@ -48,18 +59,39 @@ app.use(
         return callback(null, true);
       }
 
+      console.warn(`CORS blocked origin: ${origin}`);
+
       return callback(new Error("CORS blocked"));
     },
 
     credentials: true,
+
+    methods: [
+      "GET",
+      "POST",
+      "PUT",
+      "PATCH",
+      "DELETE",
+      "OPTIONS",
+    ],
+
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+    ],
   })
 );
 
 /* ============================================================
-   BODY PARSERS & MONGO SANITIZE
+   BODY PARSERS
 ============================================================ */
 
-app.use(express.json({ limit: "1mb" }));
+app.use(
+  express.json({
+    limit: "1mb",
+  })
+);
 
 app.use(
   express.urlencoded({
@@ -68,11 +100,23 @@ app.use(
   })
 );
 
-// Express 5 compatible in-place NoSQL injection sanitization
+/* ============================================================
+   MONGO SANITIZATION
+============================================================ */
+
 app.use((req, res, next) => {
-  if (req.body) mongoSanitize.sanitize(req.body);
-  if (req.params) mongoSanitize.sanitize(req.params);
-  if (req.query) mongoSanitize.sanitize(req.query);
+  if (req.body) {
+    mongoSanitize.sanitize(req.body);
+  }
+
+  if (req.params) {
+    mongoSanitize.sanitize(req.params);
+  }
+
+  if (req.query) {
+    mongoSanitize.sanitize(req.query);
+  }
+
   next();
 });
 
@@ -102,7 +146,19 @@ app.get("/api/health", (req, res) => {
 app.use("/api", routes);
 
 /* ============================================================
-   ERROR HANDLER
+   404 HANDLER
+============================================================ */
+
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: "Route not found",
+    path: req.originalUrl,
+  });
+});
+
+/* ============================================================
+   GLOBAL ERROR HANDLER
 ============================================================ */
 
 app.use(errorHandler);
