@@ -49,12 +49,8 @@ export const verifyEmailConnection = async () => {
 
     return true;
   } catch (error) {
-    console.error("❌ Gmail SMTP verification failed");
-    console.error("Error:", error.message);
-
-    throw new Error(
-      `Email service verification failed: ${error.message}`
-    );
+    console.error("⚠️ Gmail SMTP verification warning:", error.message);
+    return false;
   }
 };
 
