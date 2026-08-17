@@ -1,30 +1,50 @@
 import ApiError from "../utils/ApiError.js";
-import { verifyAccessToken } from "../validations/auth.tokens.js";
-import { validateUserFromToken } from "../services/auth.service.js";
+import {
+  verifyAccessToken,
+} from "../validations/auth.tokens.js";
 
-const getBearerToken = (req) => {
-  // 1. Check Authorization: Bearer header (Primary for SPA / cross-domain)
+import {
+  validateUserFromToken,
+} from "../services/auth.service.js";
+
+// ============================================================
+// GET ACCESS TOKEN
+// ============================================================
+
+const getAccessToken = (req) => {
   const authorization = req.headers.authorization;
+
+  // Authorization header
   if (
     typeof authorization === "string" &&
     authorization.startsWith("Bearer ")
   ) {
-    const token = authorization.slice(7).trim();
-    if (token) return token;
+    const token = authorization
+      .slice(7)
+      .trim();
+
+    if (token) {
+      return token;
+    }
   }
 
-  // 2. Check HttpOnly cookie accessToken
-  if (req.cookies?.accessToken) {
-    return req.cookies.accessToken;
-  }
+  // HttpOnly cookie
+  const cookieToken =
+    req.cookies?.accessToken;
 
-  // 3. Check HttpOnly cookie token
-  if (req.cookies?.token) {
-    return req.cookies.token;
+  if (
+    typeof cookieToken === "string" &&
+    cookieToken.trim()
+  ) {
+    return cookieToken.trim();
   }
 
   return null;
 };
+
+// ============================================================
+// AUTHENTICATE
+// ============================================================
 
 export const authenticate = async (
   req,
@@ -32,8 +52,7 @@ export const authenticate = async (
   next
 ) => {
   try {
-    const token =
-      getBearerToken(req);
+    const token = getAccessToken(req);
 
     if (!token) {
       throw new ApiError(
@@ -43,13 +62,33 @@ export const authenticate = async (
     }
 
     let decoded;
+
     try {
-      decoded = verifyAccessToken(token);
-    } catch (err) {
-      if (err.message === "TOKEN_EXPIRED" || err.name === "TokenExpiredError") {
-        throw new ApiError(401, "Access token expired.");
+      decoded =
+        verifyAccessToken(token);
+    } catch (error) {
+      switch (error?.message) {
+        case "TOKEN_EXPIRED":
+          throw new ApiError(
+            401,
+            "Access token expired."
+          );
+
+        case "TOKEN_MISSING":
+        case "INVALID_TOKEN":
+        case "INVALID_TOKEN_PAYLOAD":
+        case "INVALID_TOKEN_TYPE":
+          throw new ApiError(
+            401,
+            "Invalid authentication token."
+          );
+
+        default:
+          throw new ApiError(
+            401,
+            "Authentication failed."
+          );
       }
-      throw new ApiError(401, err.message || "Invalid authentication token.");
     }
 
     if (!decoded?.sub) {
@@ -59,22 +98,19 @@ export const authenticate = async (
       );
     }
 
+    /*
+     * Validate that the account still exists
+     * and is active.
+     */
     const user =
       await validateUserFromToken(
         decoded.sub
       );
 
-    if (!user) {
-      throw new ApiError(
-        401,
-        "Authentication required."
-      );
-    }
-
     req.user = user;
 
-    next();
+    return next();
   } catch (error) {
-    next(error);
+    return next(error);
   }
 };

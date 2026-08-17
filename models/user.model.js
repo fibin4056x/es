@@ -42,16 +42,20 @@ const userSchema = new mongoose.Schema(
       trim: true,
       maxlength: [254, "Email cannot exceed 254 characters"],
       match: [
-        /^\S+@\S+\.\S+$/,
+        /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
         "Invalid email format",
       ],
+      index: true,
     },
 
     avatar: {
       type: String,
       default: null,
       trim: true,
-      maxlength: [2048, "Avatar URL is too long"],
+      maxlength: [
+        2048,
+        "Avatar URL is too long",
+      ],
     },
 
     // ==========================================================
@@ -62,6 +66,8 @@ const userSchema = new mongoose.Schema(
       type: String,
       select: false,
       default: null,
+      minlength: [8, "Password must be at least 8 characters"],
+      maxlength: [128, "Password cannot exceed 128 characters"],
     },
 
     // ==========================================================
@@ -155,6 +161,7 @@ const userSchema = new mongoose.Schema(
     passwordChangedAt: {
       type: Date,
       default: null,
+      index: true,
     },
   },
   {
@@ -168,34 +175,18 @@ const userSchema = new mongoose.Schema(
 // INDEXES
 // ============================================================
 
-// Email:
-//
-// `unique: true` on the email field already creates
-// the required unique index.
-//
-// Do NOT create another email index.
+// Email already has a unique index because of unique:true.
 
-// ------------------------------------------------------------
-// ROLE + STATUS
-// ------------------------------------------------------------
-
+// Useful for administration/filtering.
 userSchema.index({
   role: 1,
   status: 1,
 });
 
-// ------------------------------------------------------------
-// ACTIVE / NON-DELETED USERS
-// ------------------------------------------------------------
-
 userSchema.index({
   isDeleted: 1,
   isActive: 1,
 });
-
-// ------------------------------------------------------------
-// USER LISTING
-// ------------------------------------------------------------
 
 userSchema.index({
   createdAt: -1,
@@ -203,15 +194,6 @@ userSchema.index({
 
 // ============================================================
 // PASSWORD HASHING
-// ============================================================
-//
-// Passwords are hashed automatically whenever the password
-// field is created or modified.
-//
-// Important:
-// password is already select:false, so normal queries do not
-// return the hash.
-//
 // ============================================================
 
 userSchema.pre("save", async function () {
@@ -228,16 +210,13 @@ userSchema.pre("save", async function () {
 });
 
 // ============================================================
-// SAFE JSON SERIALIZATION
+// SAFE JSON
 // ============================================================
 
 userSchema.methods.toJSON = function () {
   const obj = this.toObject();
 
-  // Never expose password hashes.
   delete obj.password;
-
-  // Defensive removal.
   delete obj.__v;
 
   return obj;
@@ -277,24 +256,28 @@ userSchema.methods.isAccountUsable = function () {
 };
 
 // ============================================================
-// FIRST LOGIN CHECK
+// FIRST LOGIN
 // ============================================================
 
-userSchema.methods.isFirstLoginRequired = function () {
-  return (
-    this.role === ROLES.TEACHER &&
-    (
-      this.emailVerified === false ||
-      this.firstLoginCompleted === false ||
-      this.status === "pending_verification"
-    )
-  );
-};
+userSchema.methods.isFirstLoginRequired =
+  function () {
+    return (
+      this.role === ROLES.TEACHER &&
+      (
+        this.emailVerified === false ||
+        this.firstLoginCompleted === false ||
+        this.status === "pending_verification"
+      )
+    );
+  };
 
 // ============================================================
 // MODEL
 // ============================================================
 
-const User = mongoose.model("User", userSchema);
+const User = mongoose.model(
+  "User",
+  userSchema
+);
 
 export default User;

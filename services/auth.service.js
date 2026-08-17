@@ -6,7 +6,6 @@ import User from "../models/user.model.js";
 import RefreshSession from "../models/refreshSession.model.js";
 import ApiError from "../utils/ApiError.js";
 import { ENV } from "../config/env.js";
-
 import { ROLES } from "../models/constants/role.js";
 
 import {
@@ -28,11 +27,12 @@ import {
   sendPasswordChangedNotificationEmail,
 } from "./email.service.js";
 
-// ============================================================
-// CONFIGURATION
-// ============================================================
+/* ============================================================
+   CONSTANTS
+============================================================ */
 
 const MIN_PASSWORD_LENGTH = 8;
+const MAX_PASSWORD_LENGTH = 128;
 
 const OTP_PURPOSES = Object.freeze({
   LOGIN: "LOGIN",
@@ -40,22 +40,30 @@ const OTP_PURPOSES = Object.freeze({
   PASSWORD_RESET: "PASSWORD_RESET",
 });
 
-// ============================================================
-// HELPERS
-// ============================================================
+const USER_STATUS = Object.freeze({
+  ACTIVE: "active",
+  INACTIVE: "inactive",
+  SUSPENDED: "suspended",
+  LEAVE: "leave",
+  PENDING_VERIFICATION: "pending_verification",
+});
+
+/* ============================================================
+   VALIDATION HELPERS
+============================================================ */
 
 const normalizeEmail = (email) => {
   if (typeof email !== "string") {
     throw new ApiError(400, "Valid email is required.");
   }
 
-  const normalizedEmail = email.trim().toLowerCase();
+  const normalized = email.trim().toLowerCase();
 
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
     throw new ApiError(400, "Invalid email address.");
   }
 
-  return normalizedEmail;
+  return normalized;
 };
 
 const validateUserId = (userId) => {
@@ -82,10 +90,10 @@ const validatePassword = (password) => {
     );
   }
 
-  if (password.length > 128) {
+  if (password.length > MAX_PASSWORD_LENGTH) {
     throw new ApiError(
       400,
-      "Password cannot exceed 128 characters."
+      `Password cannot exceed ${MAX_PASSWORD_LENGTH} characters.`
     );
   }
 
@@ -96,13 +104,12 @@ const validatePasswordPair = (
   newPassword,
   confirmPassword
 ) => {
-  if (
-    typeof newPassword !== "string" ||
-    typeof confirmPassword !== "string"
-  ) {
+  validatePassword(newPassword);
+
+  if (typeof confirmPassword !== "string") {
     throw new ApiError(
       400,
-      "New password and confirmation password are required."
+      "Password confirmation is required."
     );
   }
 
@@ -112,9 +119,11 @@ const validatePasswordPair = (
       "Passwords do not match."
     );
   }
-
-  validatePassword(newPassword);
 };
+
+/* ============================================================
+   USER HELPERS
+============================================================ */
 
 const buildUser = (user) => ({
   id: user._id.toString(),
@@ -143,7 +152,7 @@ const ensureActiveUser = (user) => {
   if (user.isDeleted) {
     throw new ApiError(
       403,
-      "User account is no longer available."
+      "Your account is no longer available."
     );
   }
 
@@ -154,7 +163,7 @@ const ensureActiveUser = (user) => {
     );
   }
 
-  if (user.status !== "active") {
+  if (user.status !== USER_STATUS.ACTIVE) {
     throw new ApiError(
       403,
       "Your account is not active."
@@ -162,12 +171,73 @@ const ensureActiveUser = (user) => {
   }
 };
 
-const hashToken = (token) => {
-  return crypto
+const ensureTeacherEligible = (user) => {
+  if (!user) {
+    throw new ApiError(
+      404,
+      "Teacher account not found."
+    );
+  }
+
+  if (user.role !== ROLES.TEACHER) {
+    throw new ApiError(
+      403,
+      "Invalid account type."
+    );
+  }
+
+  if (user.isDeleted) {
+    throw new ApiError(
+      403,
+      "Your account is no longer available."
+    );
+  }
+
+  if (!user.isActive) {
+    throw new ApiError(
+      403,
+      "Your account is inactive."
+    );
+  }
+
+  if (
+    user.status === USER_STATUS.SUSPENDED ||
+    user.status === USER_STATUS.LEAVE
+  ) {
+    throw new ApiError(
+      403,
+      "Your account is not eligible for verification."
+    );
+  }
+};
+
+const requiresFirstLogin = (user) =>
+  user.role === ROLES.TEACHER &&
+  (
+    !user.emailVerified ||
+    !user.firstLoginCompleted ||
+    user.status === USER_STATUS.PENDING_VERIFICATION
+  );
+
+const getLoginOtpPurpose = (user) =>
+  requiresFirstLogin(user)
+    ? OTP_PURPOSES.FIRST_LOGIN
+    : OTP_PURPOSES.LOGIN;
+
+/* ============================================================
+   REFRESH TOKEN HELPERS
+============================================================ */
+
+const hashToken = (token) =>
+  crypto
     .createHash("sha256")
     .update(token)
     .digest("hex");
-};
+
+const getRefreshExpiration = () =>
+  new Date(
+    Date.now() + ENV.REFRESH_COOKIE_MAX_AGE
+  );
 
 const revokeAllUserRefreshSessions = async (userId) => {
   await RefreshSession.updateMany(
@@ -184,15 +254,13 @@ const revokeAllUserRefreshSessions = async (userId) => {
   );
 };
 
-// ============================================================
-// LOGIN
-// ============================================================
+/* ============================================================
+   LOGIN
+============================================================ */
 
 export const loginService = async ({
   email,
   password,
-  ipAddress = "",
-  userAgent = "",
 }) => {
   const normalizedEmail = normalizeEmail(email);
 
@@ -206,22 +274,26 @@ export const loginService = async ({
     );
   }
 
-  console.log(`[LOGIN_START] Email: ${normalizedEmail}`);
-
+  /*
+   * Password is select:false in the schema,
+   * so explicitly request it only for login.
+   */
   const user = await User.findOne({
     email: normalizedEmail,
     isDeleted: false,
-  }).select("+password");
+  })
+    .select("+password")
+    .exec();
 
+  /*
+   * Do not reveal whether the email exists.
+   */
   if (!user || !user.password) {
-    console.log(`[LOGIN_FAILED] User not found or no password hash for ${normalizedEmail}`);
     throw new ApiError(
       401,
       "Invalid email or password."
     );
   }
-
-  console.log(`[USER_FOUND] ID: ${user._id}, Role: ${user.role}, Status: ${user.status}`);
 
   const passwordMatch = await bcrypt.compare(
     password,
@@ -229,26 +301,16 @@ export const loginService = async ({
   );
 
   if (!passwordMatch) {
-    console.log(`[LOGIN_FAILED] Invalid password for ${normalizedEmail}`);
     throw new ApiError(
       401,
       "Invalid email or password."
     );
   }
 
-  console.log(`[PASSWORD_MATCH] Success for user ${user._id}`);
-
-  // ----------------------------------------------------------
-  // ACCOUNT STATE CHECK
-  // ----------------------------------------------------------
-
-  if (user.isDeleted) {
-    throw new ApiError(
-      403,
-      "Your account is no longer available."
-    );
-  }
-
+  /*
+   * Account must be checked only after
+   * credentials are validated.
+   */
   if (!user.isActive) {
     throw new ApiError(
       403,
@@ -256,30 +318,54 @@ export const loginService = async ({
     );
   }
 
-  // Determine OTP Purpose
-  const requiresFirstLogin =
-    user.role === ROLES.TEACHER &&
-    (
-      !user.emailVerified ||
-      !user.firstLoginCompleted ||
-      user.status === "pending_verification"
+  if (
+    user.status === USER_STATUS.SUSPENDED
+  ) {
+    throw new ApiError(
+      403,
+      "Your account is suspended."
     );
+  }
 
-  const otpPurpose = requiresFirstLogin
-    ? OTP_PURPOSES.FIRST_LOGIN
-    : OTP_PURPOSES.LOGIN;
+  if (
+    user.status === USER_STATUS.LEAVE
+  ) {
+    throw new ApiError(
+      403,
+      "Your account is currently on leave."
+    );
+  }
 
-  // ----------------------------------------------------------
-  // GENERATE AND DISPATCH OTP
-  // ----------------------------------------------------------
+  /*
+   * A pending teacher can continue through
+   * first-login verification.
+   */
+  if (
+    user.status !== USER_STATUS.ACTIVE &&
+    !requiresFirstLogin(user)
+  ) {
+    throw new ApiError(
+      403,
+      "Your account is not active."
+    );
+  }
+
+  const otpPurpose =
+    getLoginOtpPurpose(user);
 
   try {
-    await generateAndSendOtp(user, otpPurpose);
-  } catch (otpErr) {
-    console.error("❌ OTP Email Dispatch Failed:", otpErr.message);
+    await generateAndSendOtp(
+      user,
+      otpPurpose
+    );
+  } catch (error) {
+    /*
+     * Do not expose internal SMTP/provider
+     * information to the client.
+     */
     throw new ApiError(
-      otpErr.statusCode || 500,
-      otpErr.message || "Failed to send verification code. Please check email service configuration."
+      error?.statusCode || 503,
+      "Unable to send the verification code. Please try again later."
     );
   }
 
@@ -289,13 +375,14 @@ export const loginService = async ({
     requiresVerification: true,
     otpRequired: true,
     email: user.email,
-    message: "Verification code sent to your registered email.",
+    message:
+      "Verification code sent to your registered email.",
   };
 };
 
-// ============================================================
-// VERIFY LOGIN OTP
-// ============================================================
+/* ============================================================
+   VERIFY LOGIN OTP
+============================================================ */
 
 export const verifyLoginOtpService = async ({
   email,
@@ -303,48 +390,81 @@ export const verifyLoginOtpService = async ({
   ipAddress = "",
   userAgent = "",
 }) => {
-  const normalizedEmail = normalizeEmail(email);
+  const normalizedEmail =
+    normalizeEmail(email);
 
   let otpResult;
+
+  /*
+   * Try normal login OTP first.
+   *
+   * If this account is in first-login mode,
+   * accept FIRST_LOGIN OTP.
+   */
   try {
-    otpResult = await verifyOtp(normalizedEmail, otp, OTP_PURPOSES.LOGIN);
-  } catch (err) {
-    // Fall back to FIRST_LOGIN purpose if needed
+    otpResult = await verifyOtp(
+      normalizedEmail,
+      otp,
+      OTP_PURPOSES.LOGIN
+    );
+  } catch (loginOtpError) {
     try {
-      otpResult = await verifyOtp(normalizedEmail, otp, OTP_PURPOSES.FIRST_LOGIN);
+      otpResult = await verifyOtp(
+        normalizedEmail,
+        otp,
+        OTP_PURPOSES.FIRST_LOGIN
+      );
     } catch {
-      throw err;
+      throw loginOtpError;
     }
   }
 
   const user = await User.findOne({
     _id: otpResult.userId,
     isDeleted: false,
-  });
+  }).exec();
 
-  ensureActiveUser(user);
+  ensureActiveUser(
+    user.status === USER_STATUS.PENDING_VERIFICATION
+      ? null
+      : user
+  );
+
+  /*
+   * For a teacher first login, OTP verification
+   * should normally go through the dedicated
+   * setup flow. Do not silently bypass password setup.
+   */
+  if (
+    user.role === ROLES.TEACHER &&
+    !user.firstLoginCompleted
+  ) {
+    throw new ApiError(
+      409,
+      "First-login account setup is required."
+    );
+  }
 
   user.emailVerified = true;
-  user.firstLoginCompleted = true;
-  if (user.status === "pending_verification") {
-    user.status = "active";
-  }
   user.lastLogin = new Date();
 
   await user.save();
 
-  const accessToken = generateAccessToken(user);
-  const refreshToken = generateRefreshToken(user);
-  const tokenHash = hashToken(refreshToken);
+  const accessToken =
+    generateAccessToken(user);
+
+  const refreshToken =
+    generateRefreshToken(user);
+
+  const tokenHash =
+    hashToken(refreshToken);
 
   await RefreshSession.create({
     userId: user._id,
     tokenHash,
-    ipAddress,
-    userAgent,
-    expiresAt: new Date(
-      Date.now() + ENV.REFRESH_COOKIE_MAX_AGE
-    ),
+    ipAddress: ipAddress || null,
+    userAgent: userAgent || null,
+    expiresAt: getRefreshExpiration(),
   });
 
   return {
@@ -355,51 +475,52 @@ export const verifyLoginOtpService = async ({
   };
 };
 
-// ============================================================
-// RESEND LOGIN OTP
-// ============================================================
+/* ============================================================
+   RESEND LOGIN OTP
+============================================================ */
 
-export const resendLoginOtpService = async ({ email }) => {
-  const normalizedEmail = normalizeEmail(email);
+export const resendLoginOtpService = async ({
+  email,
+}) => {
+  const normalizedEmail =
+    normalizeEmail(email);
 
   const user = await User.findOne({
     email: normalizedEmail,
     isDeleted: false,
-  });
+  }).exec();
 
-  ensureActiveUser(user);
+  ensureActiveUser(
+    user?.status === USER_STATUS.PENDING_VERIFICATION
+      ? null
+      : user
+  );
 
-  const requiresFirstLogin =
-    user.role === ROLES.TEACHER &&
-    (
-      !user.emailVerified ||
-      !user.firstLoginCompleted ||
-      user.status === "pending_verification"
-    );
-
-  const otpPurpose = requiresFirstLogin
-    ? OTP_PURPOSES.FIRST_LOGIN
-    : OTP_PURPOSES.LOGIN;
+  const otpPurpose =
+    getLoginOtpPurpose(user);
 
   try {
-    await generateAndSendOtp(user, otpPurpose);
-  } catch (otpErr) {
-    console.error("❌ Resend OTP Email Failed:", otpErr.message);
+    await generateAndSendOtp(
+      user,
+      otpPurpose
+    );
+  } catch {
     throw new ApiError(
-      otpErr.statusCode || 500,
-      otpErr.message || "Failed to resend verification code. Please try again."
+      503,
+      "Unable to send the verification code. Please try again later."
     );
   }
 
   return {
     success: true,
-    message: "New verification code sent to your registered email.",
+    message:
+      "New verification code sent to your registered email.",
   };
 };
 
-// ============================================================
-// REFRESH ACCESS TOKEN
-// ============================================================
+/* ============================================================
+   REFRESH ACCESS TOKEN
+============================================================ */
 
 export const refreshAccessTokenService = async ({
   refreshToken,
@@ -407,8 +528,8 @@ export const refreshAccessTokenService = async ({
   userAgent = "",
 }) => {
   if (
-    !refreshToken ||
-    typeof refreshToken !== "string"
+    typeof refreshToken !== "string" ||
+    !refreshToken.trim()
   ) {
     throw new ApiError(
       401,
@@ -419,7 +540,10 @@ export const refreshAccessTokenService = async ({
   let decoded;
 
   try {
-    decoded = verifyRefreshToken(refreshToken);
+    decoded =
+      verifyRefreshToken(
+        refreshToken
+      );
   } catch {
     throw new ApiError(
       401,
@@ -430,10 +554,14 @@ export const refreshAccessTokenService = async ({
   const tokenHash =
     hashToken(refreshToken);
 
+  /*
+   * tokenHash has a unique index, so this is
+   * an efficient O(1)-style indexed lookup.
+   */
   const session =
     await RefreshSession.findOne({
       tokenHash,
-    });
+    }).exec();
 
   if (!session) {
     throw new ApiError(
@@ -442,10 +570,12 @@ export const refreshAccessTokenService = async ({
     );
   }
 
-  // ----------------------------------------------------------
-  // REUSE DETECTION
-  // ----------------------------------------------------------
-
+  /*
+   * Reuse detection.
+   *
+   * A revoked refresh token being presented again
+   * indicates possible token theft.
+   */
   if (session.isRevoked) {
     await revokeAllUserRefreshSessions(
       session.userId
@@ -453,13 +583,9 @@ export const refreshAccessTokenService = async ({
 
     throw new ApiError(
       401,
-      "Refresh token has been revoked due to security policy."
+      "Refresh session is no longer valid."
     );
   }
-
-  // ----------------------------------------------------------
-  // EXPIRATION
-  // ----------------------------------------------------------
 
   if (
     session.expiresAt <= new Date()
@@ -475,7 +601,7 @@ export const refreshAccessTokenService = async ({
           revokedAt: new Date(),
         },
       }
-    );
+    ).exec();
 
     throw new ApiError(
       401,
@@ -483,10 +609,10 @@ export const refreshAccessTokenService = async ({
     );
   }
 
-  // ----------------------------------------------------------
-  // TOKEN/SSESSION USER CONSISTENCY
-  // ----------------------------------------------------------
-
+  /*
+   * Ensure the JWT and database session
+   * belong to the same user.
+   */
   if (
     decoded.sub !==
     session.userId.toString()
@@ -501,26 +627,21 @@ export const refreshAccessTokenService = async ({
     );
   }
 
-  // ----------------------------------------------------------
-  // USER
-  // ----------------------------------------------------------
-
-  const user = await User.findOne({
-    _id: session.userId,
-    isDeleted: false,
-  });
+  const user =
+    await User.findOne({
+      _id: session.userId,
+      isDeleted: false,
+    }).exec();
 
   ensureActiveUser(user);
 
-  // ----------------------------------------------------------
-  // ATOMIC ROTATION
-  // ----------------------------------------------------------
-  //
-  // Only one concurrent request can successfully
-  // rotate the same refresh session.
-  //
-
-  const revokedSession =
+  /*
+   * Atomic rotation.
+   *
+   * Two simultaneous requests using the same
+   * refresh token cannot both rotate it.
+   */
+  const rotatedSession =
     await RefreshSession.findOneAndUpdate(
       {
         _id: session._id,
@@ -535,9 +656,9 @@ export const refreshAccessTokenService = async ({
       {
         new: true,
       }
-    );
+    ).exec();
 
-  if (!revokedSession) {
+  if (!rotatedSession) {
     await revokeAllUserRefreshSessions(
       session.userId
     );
@@ -548,10 +669,6 @@ export const refreshAccessTokenService = async ({
     );
   }
 
-  // ----------------------------------------------------------
-  // NEW TOKEN PAIR
-  // ----------------------------------------------------------
-
   const newAccessToken =
     generateAccessToken(user);
 
@@ -561,20 +678,17 @@ export const refreshAccessTokenService = async ({
   const newTokenHash =
     hashToken(newRefreshToken);
 
-  revokedSession.replacedByTokenHash =
+  rotatedSession.replacedByTokenHash =
     newTokenHash;
 
-  await revokedSession.save();
+  await rotatedSession.save();
 
   await RefreshSession.create({
     userId: user._id,
     tokenHash: newTokenHash,
-    ipAddress,
-    userAgent,
-    expiresAt: new Date(
-      Date.now() +
-      ENV.REFRESH_COOKIE_MAX_AGE
-    ),
+    ipAddress: ipAddress || null,
+    userAgent: userAgent || null,
+    expiresAt: getRefreshExpiration(),
   });
 
   return {
@@ -584,9 +698,9 @@ export const refreshAccessTokenService = async ({
   };
 };
 
-// ============================================================
-// LOGOUT
-// ============================================================
+/* ============================================================
+   LOGOUT
+============================================================ */
 
 export const logoutService = async ({
   refreshToken,
@@ -607,8 +721,14 @@ export const logoutService = async ({
           revokedAt: new Date(),
         },
       }
-    );
-  } else if (userId) {
+    ).exec();
+
+    return {
+      success: true,
+    };
+  }
+
+  if (userId) {
     const validUserId =
       validateUserId(userId);
 
@@ -622,20 +742,25 @@ export const logoutService = async ({
   };
 };
 
-// ============================================================
-// TEACHER - REQUEST VERIFICATION OTP
-// ============================================================
+/* ============================================================
+   TEACHER - REQUEST VERIFICATION OTP
+============================================================ */
 
 export const requestVerificationOtpService =
   async (email) => {
     const normalizedEmail =
       normalizeEmail(email);
 
-    const user = await User.findOne({
-      email: normalizedEmail,
-      isDeleted: false,
-    });
+    const user =
+      await User.findOne({
+        email: normalizedEmail,
+        isDeleted: false,
+      }).exec();
 
+    /*
+     * This endpoint is specifically for teachers,
+     * so the error can be explicit here.
+     */
     if (!user) {
       throw new ApiError(
         404,
@@ -643,36 +768,12 @@ export const requestVerificationOtpService =
       );
     }
 
-    if (
-      user.role !== ROLES.TEACHER
-    ) {
-      throw new ApiError(
-        400,
-        "First-login verification is only available for teacher accounts."
-      );
-    }
-
-    if (!user.isActive) {
-      throw new ApiError(
-        403,
-        "Your account is inactive."
-      );
-    }
-
-    if (
-      user.status === "suspended" ||
-      user.status === "leave"
-    ) {
-      throw new ApiError(
-        403,
-        "Your account is not eligible for verification."
-      );
-    }
+    ensureTeacherEligible(user);
 
     if (
       user.emailVerified &&
       user.firstLoginCompleted &&
-      user.status === "active"
+      user.status === USER_STATUS.ACTIVE
     ) {
       throw new ApiError(
         400,
@@ -680,21 +781,37 @@ export const requestVerificationOtpService =
       );
     }
 
-    return generateAndSendOtp(
-      user,
-      OTP_PURPOSES.FIRST_LOGIN
-    );
+    try {
+      await generateAndSendOtp(
+        user,
+        OTP_PURPOSES.FIRST_LOGIN
+      );
+    } catch {
+      throw new ApiError(
+        503,
+        "Unable to send the verification code. Please try again later."
+      );
+    }
+
+    return {
+      success: true,
+      message:
+        "Verification code sent to your registered email.",
+    };
   };
 
-// ============================================================
-// TEACHER - VERIFY OTP
-// ============================================================
+/* ============================================================
+   TEACHER - VERIFY OTP
+============================================================ */
 
 export const verifyTeacherOtpService =
   async (email, otp) => {
+    const normalizedEmail =
+      normalizeEmail(email);
+
     const result =
       await verifyOtp(
-        email,
+        normalizedEmail,
         otp,
         OTP_PURPOSES.FIRST_LOGIN
       );
@@ -703,47 +820,20 @@ export const verifyTeacherOtpService =
       await User.findOne({
         _id: result.userId,
         isDeleted: false,
-      });
+      }).exec();
 
-    if (!user) {
-      throw new ApiError(
-        404,
-        "User account not found."
-      );
-    }
+    ensureTeacherEligible(user);
 
-    if (
-      user.role !== ROLES.TEACHER
-    ) {
+    if (user.firstLoginCompleted) {
       throw new ApiError(
-        403,
-        "Invalid account type."
-      );
-    }
-
-    if (!user.isActive) {
-      throw new ApiError(
-        403,
-        "Your account is inactive."
-      );
-    }
-
-    if (
-      user.status === "suspended" ||
-      user.status === "leave"
-    ) {
-      throw new ApiError(
-        403,
-        "Your account is not eligible for verification."
+        409,
+        "First-login setup has already been completed."
       );
     }
 
     user.emailVerified = true;
-
-    if (!user.firstLoginCompleted) {
-      user.status =
-        "pending_verification";
-    }
+    user.status =
+      USER_STATUS.PENDING_VERIFICATION;
 
     await user.save();
 
@@ -758,9 +848,9 @@ export const verifyTeacherOtpService =
     };
   };
 
-// ============================================================
-// TEACHER - COMPLETE FIRST LOGIN
-// ============================================================
+/* ============================================================
+   TEACHER - COMPLETE FIRST LOGIN
+============================================================ */
 
 export const completeFirstLoginService =
   async (
@@ -801,7 +891,9 @@ export const completeFirstLoginService =
       await User.findOne({
         _id: decoded.sub,
         isDeleted: false,
-      }).select("+password");
+      })
+        .select("+password")
+        .exec();
 
     if (!user) {
       throw new ApiError(
@@ -810,9 +902,7 @@ export const completeFirstLoginService =
       );
     }
 
-    if (
-      user.role !== ROLES.TEACHER
-    ) {
+    if (user.role !== ROLES.TEACHER) {
       throw new ApiError(
         403,
         "Invalid account type."
@@ -840,10 +930,6 @@ export const completeFirstLoginService =
       );
     }
 
-    // ----------------------------------------------------------
-    // PASSWORD
-    // ----------------------------------------------------------
-
     if (user.password) {
       const samePassword =
         await bcrypt.compare(
@@ -859,66 +945,71 @@ export const completeFirstLoginService =
       }
     }
 
-    user.password =
-      newPassword;
-
-    user.emailVerified =
-      true;
-
-    user.firstLoginCompleted =
-      true;
-
-    user.status =
-      "active";
-
-    user.isActive =
-      true;
-
-    user.lastLogin =
-      new Date();
+    /*
+     * User model pre-save hook hashes this password.
+     */
+    user.password = newPassword;
+    user.emailVerified = true;
+    user.firstLoginCompleted = true;
+    user.status = USER_STATUS.ACTIVE;
+    user.isActive = true;
+    user.lastLogin = new Date();
 
     await user.save();
 
-    // ----------------------------------------------------------
-    // INVALIDATE ANY OLD SESSIONS
-    // ----------------------------------------------------------
-
+    /*
+     * A setup flow must invalidate all previously
+     * issued refresh sessions.
+     */
     await revokeAllUserRefreshSessions(
       user._id
     );
 
-    // ----------------------------------------------------------
-    // EMAIL
-    // ----------------------------------------------------------
-
+    /*
+     * Email notification is best-effort.
+     * Account setup should not fail because SMTP is down.
+     */
     try {
       await sendPasswordChangedNotificationEmail({
         to: user.email,
         name: user.name,
       });
     } catch {
-      // Notification failure must not
-      // undo successful account setup.
+      // Intentionally ignored.
     }
 
-    // ----------------------------------------------------------
-    // LOGIN
-    // ----------------------------------------------------------
-
+    /*
+     * IMPORTANT:
+     * Return both access and refresh tokens if the
+     * controller expects automatic login after setup.
+     */
     const accessToken =
       generateAccessToken(user);
+
+    const refreshToken =
+      generateRefreshToken(user);
+
+    const tokenHash =
+      hashToken(refreshToken);
+
+    await RefreshSession.create({
+      userId: user._id,
+      tokenHash,
+      expiresAt: getRefreshExpiration(),
+    });
 
     return {
       message:
         "Account setup completed successfully.",
       token: accessToken,
+      refreshToken,
       user: buildUser(user),
     };
   };
 
-// ============================================================
-// CHANGE PASSWORD
-// ============================================================
+/* ============================================================
+   CHANGE PASSWORD
+============================================================ */
 
 export const changePasswordService =
   async (
@@ -931,7 +1022,8 @@ export const changePasswordService =
       validateUserId(userId);
 
     if (
-      typeof currentPassword !== "string"
+      typeof currentPassword !== "string" ||
+      !currentPassword
     ) {
       throw new ApiError(
         400,
@@ -945,8 +1037,7 @@ export const changePasswordService =
     );
 
     if (
-      currentPassword ===
-      newPassword
+      currentPassword === newPassword
     ) {
       throw new ApiError(
         400,
@@ -958,7 +1049,9 @@ export const changePasswordService =
       await User.findOne({
         _id: validUserId,
         isDeleted: false,
-      }).select("+password");
+      })
+        .select("+password")
+        .exec();
 
     ensureActiveUser(user);
 
@@ -987,7 +1080,9 @@ export const changePasswordService =
 
     await user.save();
 
-    // Revoke every refresh session.
+    /*
+     * Password change invalidates every refresh session.
+     */
     await revokeAllUserRefreshSessions(
       user._id
     );
@@ -998,8 +1093,7 @@ export const changePasswordService =
         name: user.name,
       });
     } catch {
-      // Notification failure must not
-      // fail password change.
+      // Notification failure must not fail password change.
     }
 
     return {
@@ -1008,9 +1102,9 @@ export const changePasswordService =
     };
   };
 
-// ============================================================
-// FORGOT PASSWORD - REQUEST OTP
-// ============================================================
+/* ============================================================
+   FORGOT PASSWORD - REQUEST OTP
+============================================================ */
 
 export const requestForgotPasswordOtpService =
   async (email) => {
@@ -1033,33 +1127,45 @@ export const requestForgotPasswordOtpService =
       await User.findOne({
         email: normalizedEmail,
         isDeleted: false,
-      });
+      }).exec();
 
+    /*
+     * Never reveal whether an account exists.
+     */
     if (
       !user ||
       !user.isActive ||
-      user.status !== "active"
+      user.status !== USER_STATUS.ACTIVE
     ) {
       return genericResponse;
     }
 
-    await generateAndSendOtp(
-      user,
-      OTP_PURPOSES.PASSWORD_RESET
-    );
+    try {
+      await generateAndSendOtp(
+        user,
+        OTP_PURPOSES.PASSWORD_RESET
+      );
+    } catch {
+      /*
+       * Still return the generic response.
+       */
+    }
 
     return genericResponse;
   };
 
-// ============================================================
-// FORGOT PASSWORD - VERIFY OTP
-// ============================================================
+/* ============================================================
+   FORGOT PASSWORD - VERIFY OTP
+============================================================ */
 
 export const verifyForgotPasswordOtpService =
   async (email, otp) => {
+    const normalizedEmail =
+      normalizeEmail(email);
+
     const result =
       await verifyOtp(
-        email,
+        normalizedEmail,
         otp,
         OTP_PURPOSES.PASSWORD_RESET
       );
@@ -1068,7 +1174,7 @@ export const verifyForgotPasswordOtpService =
       await User.findOne({
         _id: result.userId,
         isDeleted: false,
-      });
+      }).exec();
 
     ensureActiveUser(user);
 
@@ -1082,9 +1188,9 @@ export const verifyForgotPasswordOtpService =
     };
   };
 
-// ============================================================
-// FORGOT PASSWORD - RESET
-// ============================================================
+/* ============================================================
+   FORGOT PASSWORD - RESET
+============================================================ */
 
 export const resetPasswordService =
   async (
@@ -1125,18 +1231,16 @@ export const resetPasswordService =
       await User.findOne({
         _id: decoded.sub,
         isDeleted: false,
-      }).select("+password");
+      })
+        .select("+password")
+        .exec();
 
     ensureActiveUser(user);
 
-    // ----------------------------------------------------------
-    // PREVENT RESET TOKEN REUSE
-    // ----------------------------------------------------------
-    //
-    // Once the password has changed, passwordChangedAt becomes
-    // newer than the reset token's issued time.
-    //
-
+    /*
+     * Reset token becomes invalid after passwordChangedAt
+     * moves past the token's issued-at time.
+     */
     if (
       user.passwordChangedAt &&
       decoded.iat &&
@@ -1148,10 +1252,6 @@ export const resetPasswordService =
         "Password reset token has already been used."
       );
     }
-
-    // ----------------------------------------------------------
-    // PREVENT PASSWORD REUSE
-    // ----------------------------------------------------------
 
     if (user.password) {
       const samePassword =
@@ -1173,17 +1273,12 @@ export const resetPasswordService =
 
     await user.save();
 
-    // ----------------------------------------------------------
-    // REVOKE ALL REFRESH SESSIONS
-    // ----------------------------------------------------------
-
+    /*
+     * Kill every existing authenticated session.
+     */
     await revokeAllUserRefreshSessions(
       user._id
     );
-
-    // ----------------------------------------------------------
-    // NOTIFICATION
-    // ----------------------------------------------------------
 
     try {
       await sendPasswordChangedNotificationEmail({
@@ -1191,8 +1286,7 @@ export const resetPasswordService =
         name: user.name,
       });
     } catch {
-      // Password reset must not fail because
-      // notification email failed.
+      // Notification failure must not fail password reset.
     }
 
     return {
@@ -1201,9 +1295,9 @@ export const resetPasswordService =
     };
   };
 
-// ============================================================
-// GET CURRENT USER
-// ============================================================
+/* ============================================================
+   GET CURRENT USER
+============================================================ */
 
 export const getMeService =
   async (userId) => {
@@ -1214,27 +1308,44 @@ export const getMeService =
       await User.findOne({
         _id: validUserId,
         isDeleted: false,
-      });
+      })
+        .select(
+          "name email role status isActive emailVerified firstLoginCompleted avatar profile lastLogin createdAt updatedAt"
+        )
+        .lean()
+        .exec();
 
     ensureActiveUser(user);
 
     return buildUser(user);
   };
 
-// ============================================================
-// VALIDATE USER FROM ACCESS TOKEN
-// ============================================================
+/* ============================================================
+   VALIDATE USER FROM ACCESS TOKEN
+============================================================ */
 
 export const validateUserFromToken =
   async (userId) => {
     const validUserId =
       validateUserId(userId);
 
+    /*
+     * Authentication middleware only needs a small
+     * projection, not the complete User document.
+     *
+     * This reduces MongoDB payload and object creation
+     * on every protected request.
+     */
     const user =
       await User.findOne({
         _id: validUserId,
         isDeleted: false,
-      });
+      })
+        .select(
+          "name email role status isActive emailVerified firstLoginCompleted avatar profile lastLogin createdAt updatedAt"
+        )
+        .lean()
+        .exec();
 
     if (!user) {
       throw new ApiError(
@@ -1250,7 +1361,7 @@ export const validateUserFromToken =
       );
     }
 
-    if (user.status !== "active") {
+    if (user.status !== USER_STATUS.ACTIVE) {
       throw new ApiError(
         403,
         "Account is not active."
@@ -1260,9 +1371,9 @@ export const validateUserFromToken =
     return buildUser(user);
   };
 
-// ============================================================
-// UPDATE PROFILE
-// ============================================================
+/* ============================================================
+   UPDATE PROFILE
+============================================================ */
 
 export const updateProfileService =
   async (
@@ -1287,17 +1398,15 @@ export const updateProfileService =
       await User.findOne({
         _id: validUserId,
         isDeleted: false,
-      });
+      }).exec();
 
     ensureActiveUser(user);
 
-    // ----------------------------------------------------------
-    // NAME
-    // ----------------------------------------------------------
+    /* --------------------------------------------------------
+       NAME
+    -------------------------------------------------------- */
 
-    if (
-      data.name !== undefined
-    ) {
+    if (data.name !== undefined) {
       if (
         typeof data.name !== "string"
       ) {
@@ -1327,13 +1436,11 @@ export const updateProfileService =
       user.name = name;
     }
 
-    // ----------------------------------------------------------
-    // AVATAR
-    // ----------------------------------------------------------
+    /* --------------------------------------------------------
+       AVATAR
+    -------------------------------------------------------- */
 
-    if (
-      data.avatar !== undefined
-    ) {
+    if (data.avatar !== undefined) {
       if (
         data.avatar !== null &&
         typeof data.avatar !== "string"
@@ -1351,13 +1458,11 @@ export const updateProfileService =
           : null;
     }
 
-    // ----------------------------------------------------------
-    // PROFILE
-    // ----------------------------------------------------------
+    /* --------------------------------------------------------
+       PROFILE
+    -------------------------------------------------------- */
 
-    if (
-      data.profile !== undefined
-    ) {
+    if (data.profile !== undefined) {
       if (
         !data.profile ||
         typeof data.profile !== "object" ||
@@ -1433,17 +1538,13 @@ export const updateProfileService =
       }
     }
 
-    // ----------------------------------------------------------
-    // EMAIL
-    // ----------------------------------------------------------
+    /* --------------------------------------------------------
+       EMAIL
+    -------------------------------------------------------- */
 
-    if (
-      data.email !== undefined
-    ) {
+    if (data.email !== undefined) {
       const newEmail =
-        normalizeEmail(
-          data.email
-        );
+        normalizeEmail(data.email);
 
       if (
         newEmail !== user.email

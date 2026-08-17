@@ -116,7 +116,7 @@ export const sendLoginOtpEmail = async ({
   if (!otp) {
     throw new Error("OTP is required.");
   }
-
+  console.log("Sending login OTP email to:", to, "OTP:", otp);
   const subject = "SLMS - Login Verification Code";
 
   const text = `

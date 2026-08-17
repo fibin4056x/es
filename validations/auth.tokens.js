@@ -3,6 +3,10 @@ import crypto from "crypto";
 
 import { ENV } from "../config/env.js";
 
+// ============================================================
+// TOKEN TYPES
+// ============================================================
+
 export const TOKEN_TYPES = Object.freeze({
   ACCESS: "access",
   REFRESH: "refresh",
@@ -10,32 +14,74 @@ export const TOKEN_TYPES = Object.freeze({
   RESET: "reset",
 });
 
-const TOKEN_EXPIRATION = Object.freeze({
-  ACCESS: ENV.JWT_ACCESS_EXPIRES_IN,
-  REFRESH: ENV.JWT_REFRESH_EXPIRES_IN,
-  SETUP: ENV.JWT_SETUP_EXPIRES_IN,
-  RESET: ENV.JWT_RESET_EXPIRES_IN,
-});
+// ============================================================
+// CONFIGURATION
+// ============================================================
 
-const TOKEN_SECRETS = Object.freeze({
-  ACCESS: ENV.JWT_ACCESS_SECRET,
-  REFRESH: ENV.JWT_REFRESH_SECRET,
-  SETUP: ENV.JWT_SETUP_SECRET,
-  RESET: ENV.JWT_RESET_SECRET,
+const TOKEN_CONFIG = Object.freeze({
+  [TOKEN_TYPES.ACCESS]: {
+    secret: ENV.JWT_ACCESS_SECRET,
+    expiresIn: ENV.JWT_ACCESS_EXPIRES_IN,
+  },
+
+  [TOKEN_TYPES.REFRESH]: {
+    secret: ENV.JWT_REFRESH_SECRET,
+    expiresIn: ENV.JWT_REFRESH_EXPIRES_IN,
+  },
+
+  [TOKEN_TYPES.SETUP]: {
+    secret: ENV.JWT_SETUP_SECRET,
+    expiresIn: ENV.JWT_SETUP_EXPIRES_IN,
+  },
+
+  [TOKEN_TYPES.RESET]: {
+    secret: ENV.JWT_RESET_SECRET,
+    expiresIn: ENV.JWT_RESET_EXPIRES_IN,
+  },
 });
 
 const JWT_ISSUER = ENV.JWT_ISSUER;
 const JWT_AUDIENCE = ENV.JWT_AUDIENCE;
 
+// ============================================================
+// VALIDATION
+// ============================================================
+
 const validateSecret = (secret, name) => {
-  if (
-    typeof secret !== "string" ||
-    secret.length < 32
-  ) {
+  if (typeof secret !== "string" || secret.length < 32) {
+    throw new Error(`${name} must be at least 32 characters long.`);
+  }
+};
+
+const validateGlobalConfig = () => {
+  if (!JWT_ISSUER) {
+    throw new Error("JWT issuer is not configured.");
+  }
+
+  if (!JWT_AUDIENCE) {
+    throw new Error("JWT audience is not configured.");
+  }
+};
+
+const getTokenConfig = (type) => {
+  const config = TOKEN_CONFIG[type];
+
+  if (!config) {
+    throw new Error("Invalid token type.");
+  }
+
+  validateSecret(
+    config.secret,
+    `${type.toUpperCase()} JWT secret`
+  );
+
+  if (!config.expiresIn) {
     throw new Error(
-      `${name} must be at least 32 characters long.`
+      `${type.toUpperCase()} token expiration is not configured.`
     );
   }
+
+  return config;
 };
 
 const validateUser = (user) => {
@@ -45,50 +91,27 @@ const validateUser = (user) => {
 
   if (
     typeof user.role !== "string" ||
-    !user.role
+    !user.role.trim()
   ) {
     throw new Error("User role is required.");
   }
 };
 
-const signToken = ({
-  user,
-  type,
-  expiresIn,
-  secret,
-}) => {
+// ============================================================
+// SIGN TOKEN
+// ============================================================
+
+const signToken = ({ user, type }) => {
   validateUser(user);
+  validateGlobalConfig();
 
-  if (!type) {
-    throw new Error("Token type is required.");
-  }
-
-  if (!expiresIn) {
-    throw new Error(
-      "Token expiration is not configured."
-    );
-  }
-
-  validateSecret(secret, "JWT secret");
-
-  if (!JWT_ISSUER) {
-    throw new Error(
-      "JWT issuer is not configured."
-    );
-  }
-
-  if (!JWT_AUDIENCE) {
-    throw new Error(
-      "JWT audience is not configured."
-    );
-  }
+  const { secret, expiresIn } = getTokenConfig(type);
 
   const userId = user._id.toString();
 
   return jwt.sign(
     {
       sub: userId,
-      id: userId,
       role: user.role,
       type,
     },
@@ -104,66 +127,38 @@ const signToken = ({
 };
 
 // ============================================================
-// ACCESS TOKEN
+// GENERATORS
 // ============================================================
 
-export const generateAccessToken = (user) => {
-  return signToken({
+export const generateAccessToken = (user) =>
+  signToken({
     user,
     type: TOKEN_TYPES.ACCESS,
-    expiresIn: TOKEN_EXPIRATION.ACCESS,
-    secret: TOKEN_SECRETS.ACCESS,
   });
-};
 
-// ============================================================
-// REFRESH TOKEN
-// ============================================================
-
-export const generateRefreshToken = (user) => {
-  return signToken({
+export const generateRefreshToken = (user) =>
+  signToken({
     user,
     type: TOKEN_TYPES.REFRESH,
-    expiresIn: TOKEN_EXPIRATION.REFRESH,
-    secret: TOKEN_SECRETS.REFRESH,
   });
-};
 
-// ============================================================
-// TEACHER SETUP TOKEN
-// ============================================================
-
-export const generateSetupToken = (user) => {
-  return signToken({
+export const generateSetupToken = (user) =>
+  signToken({
     user,
     type: TOKEN_TYPES.SETUP,
-    expiresIn: TOKEN_EXPIRATION.SETUP,
-    secret: TOKEN_SECRETS.SETUP,
   });
-};
 
-// ============================================================
-// PASSWORD RESET TOKEN
-// ============================================================
-
-export const generateResetToken = (user) => {
-  return signToken({
+export const generateResetToken = (user) =>
+  signToken({
     user,
     type: TOKEN_TYPES.RESET,
-    expiresIn: TOKEN_EXPIRATION.RESET,
-    secret: TOKEN_SECRETS.RESET,
   });
-};
 
 // ============================================================
 // VERIFY TOKEN
 // ============================================================
 
-const verifyToken = (
-  token,
-  expectedType,
-  secret
-) => {
+const verifyToken = (token, expectedType) => {
   if (
     typeof token !== "string" ||
     !token.trim()
@@ -171,19 +166,15 @@ const verifyToken = (
     throw new Error("TOKEN_MISSING");
   }
 
-  validateSecret(secret, "JWT secret");
+  validateGlobalConfig();
 
-  if (!JWT_ISSUER || !JWT_AUDIENCE) {
-    throw new Error(
-      "JWT issuer and audience must be configured."
-    );
-  }
+  const { secret } = getTokenConfig(expectedType);
 
   let decoded;
 
   try {
     decoded = jwt.verify(
-      token,
+      token.trim(),
       secret,
       {
         issuer: JWT_ISSUER,
@@ -192,9 +183,7 @@ const verifyToken = (
       }
     );
   } catch (error) {
-    if (
-      error?.name === "TokenExpiredError"
-    ) {
+    if (error?.name === "TokenExpiredError") {
       throw new Error("TOKEN_EXPIRED");
     }
 
@@ -205,89 +194,56 @@ const verifyToken = (
       throw new Error("INVALID_TOKEN");
     }
 
-    throw error;
+    throw new Error("TOKEN_VERIFICATION_FAILED");
   }
 
   if (
     !decoded ||
     typeof decoded !== "object"
   ) {
-    throw new Error(
-      "INVALID_TOKEN_PAYLOAD"
-    );
+    throw new Error("INVALID_TOKEN_PAYLOAD");
   }
 
   if (
     typeof decoded.sub !== "string" ||
-    typeof decoded.id !== "string" ||
     typeof decoded.role !== "string" ||
     typeof decoded.type !== "string" ||
     typeof decoded.jti !== "string"
   ) {
-    throw new Error(
-      "INVALID_TOKEN_PAYLOAD"
-    );
-  }
-
-  if (decoded.sub !== decoded.id) {
-    throw new Error(
-      "INVALID_TOKEN_PAYLOAD"
-    );
+    throw new Error("INVALID_TOKEN_PAYLOAD");
   }
 
   if (decoded.type !== expectedType) {
-    throw new Error(
-      "INVALID_TOKEN_TYPE"
-    );
+    throw new Error("INVALID_TOKEN_TYPE");
   }
 
   return decoded;
 };
 
 // ============================================================
-// VERIFY ACCESS TOKEN
+// PUBLIC VERIFIERS
 // ============================================================
 
-export const verifyAccessToken = (token) => {
-  return verifyToken(
+export const verifyAccessToken = (token) =>
+  verifyToken(
     token,
-    TOKEN_TYPES.ACCESS,
-    TOKEN_SECRETS.ACCESS
+    TOKEN_TYPES.ACCESS
   );
-};
 
-// ============================================================
-// VERIFY REFRESH TOKEN
-// ============================================================
-
-export const verifyRefreshToken = (token) => {
-  return verifyToken(
+export const verifyRefreshToken = (token) =>
+  verifyToken(
     token,
-    TOKEN_TYPES.REFRESH,
-    TOKEN_SECRETS.REFRESH
+    TOKEN_TYPES.REFRESH
   );
-};
 
-// ============================================================
-// VERIFY SETUP TOKEN
-// ============================================================
-
-export const verifySetupToken = (token) => {
-  return verifyToken(
+export const verifySetupToken = (token) =>
+  verifyToken(
     token,
-    TOKEN_TYPES.SETUP,
-    TOKEN_SECRETS.SETUP
+    TOKEN_TYPES.SETUP
   );
-};
 
-// ============================================================
-// VERIFY RESET TOKEN
-// ============================================================
-
-export const verifyResetToken = (token) => {
-  return verifyToken(
+export const verifyResetToken = (token) =>
+  verifyToken(
     token,
-    TOKEN_TYPES.RESET,
-    TOKEN_SECRETS.RESET
+    TOKEN_TYPES.RESET
   );
-};

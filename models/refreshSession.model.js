@@ -1,48 +1,45 @@
 import mongoose from "mongoose";
 
-/* ============================================================
-   REFRESH SESSION SCHEMA
-============================================================ */
-
 const refreshSessionSchema = new mongoose.Schema(
   {
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: [true, "User ID is required"],
-      index: true,
+      required: true,
     },
 
-    // Hashed refresh token.
-    // Never store the raw refresh token in MongoDB.
+    // SHA-256 hash.
+    // Raw refresh tokens are NEVER stored.
     tokenHash: {
       type: String,
-      required: [true, "Token hash is required"],
+      required: true,
       unique: true,
-      index: true,
+      trim: true,
+      select: false,
     },
 
     ipAddress: {
       type: String,
-      default: null,
       trim: true,
+      maxlength: 64,
+      default: null,
     },
 
     userAgent: {
       type: String,
-      default: null,
       trim: true,
+      maxlength: 1024,
+      default: null,
     },
 
     isRevoked: {
       type: Boolean,
       default: false,
-      index: true,
     },
 
     expiresAt: {
       type: Date,
-      required: [true, "Expiration date is required"],
+      required: true,
     },
 
     revokedAt: {
@@ -53,6 +50,8 @@ const refreshSessionSchema = new mongoose.Schema(
     replacedByTokenHash: {
       type: String,
       default: null,
+      trim: true,
+      select: false,
     },
   },
   {
@@ -61,29 +60,41 @@ const refreshSessionSchema = new mongoose.Schema(
   }
 );
 
-/* ============================================================
-   INDEXES & TTL
-============================================================ */
+// ============================================================
+// INDEXES
+// ============================================================
 
-// Automatically remove expired sessions.
+// MongoDB automatically removes expired sessions.
 refreshSessionSchema.index(
   { expiresAt: 1 },
-  { expireAfterSeconds: 0 }
+  {
+    expireAfterSeconds: 0,
+  }
 );
 
-// Fast lookup for user's active sessions.
+// Used by:
+// logout
+// refresh rotation
+// session management
 refreshSessionSchema.index({
   userId: 1,
   isRevoked: 1,
 });
 
-/* ============================================================
-   METHODS
-============================================================ */
+// ============================================================
+// METHODS
+// ============================================================
 
 refreshSessionSchema.methods.isSessionValid = function () {
-  return !this.isRevoked && this.expiresAt > new Date();
+  return (
+    this.isRevoked === false &&
+    this.expiresAt.getTime() > Date.now()
+  );
 };
+
+// ============================================================
+// MODEL
+// ============================================================
 
 const RefreshSession = mongoose.model(
   "RefreshSession",
