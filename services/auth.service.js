@@ -6,6 +6,7 @@ import User from "../models/user.model.js";
 import RefreshSession from "../models/refreshSession.model.js";
 import ApiError from "../utils/ApiError.js";
 import { ENV } from "../config/env.js";
+
 import { ROLES } from "../models/constants/role.js";
 
 import {
@@ -28,11 +29,10 @@ import {
 } from "./email.service.js";
 
 /* ============================================================
-   CONSTANTS
+   CONFIGURATION
 ============================================================ */
 
 const MIN_PASSWORD_LENGTH = 8;
-const MAX_PASSWORD_LENGTH = 128;
 
 const OTP_PURPOSES = Object.freeze({
   LOGIN: "LOGIN",
@@ -40,16 +40,8 @@ const OTP_PURPOSES = Object.freeze({
   PASSWORD_RESET: "PASSWORD_RESET",
 });
 
-const USER_STATUS = Object.freeze({
-  ACTIVE: "active",
-  INACTIVE: "inactive",
-  SUSPENDED: "suspended",
-  LEAVE: "leave",
-  PENDING_VERIFICATION: "pending_verification",
-});
-
 /* ============================================================
-   VALIDATION HELPERS
+   HELPERS
 ============================================================ */
 
 const normalizeEmail = (email) => {
@@ -57,13 +49,13 @@ const normalizeEmail = (email) => {
     throw new ApiError(400, "Valid email is required.");
   }
 
-  const normalized = email.trim().toLowerCase();
+  const normalizedEmail = email.trim().toLowerCase();
 
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
     throw new ApiError(400, "Invalid email address.");
   }
 
-  return normalized;
+  return normalizedEmail;
 };
 
 const validateUserId = (userId) => {
@@ -90,10 +82,10 @@ const validatePassword = (password) => {
     );
   }
 
-  if (password.length > MAX_PASSWORD_LENGTH) {
+  if (password.length > 128) {
     throw new ApiError(
       400,
-      `Password cannot exceed ${MAX_PASSWORD_LENGTH} characters.`
+      "Password cannot exceed 128 characters."
     );
   }
 
@@ -104,26 +96,22 @@ const validatePasswordPair = (
   newPassword,
   confirmPassword
 ) => {
-  validatePassword(newPassword);
-
-  if (typeof confirmPassword !== "string") {
+  if (
+    typeof newPassword !== "string" ||
+    typeof confirmPassword !== "string"
+  ) {
     throw new ApiError(
       400,
-      "Password confirmation is required."
+      "New password and confirmation password are required."
     );
   }
 
   if (newPassword !== confirmPassword) {
-    throw new ApiError(
-      400,
-      "Passwords do not match."
-    );
+    throw new ApiError(400, "Passwords do not match.");
   }
-};
 
-/* ============================================================
-   USER HELPERS
-============================================================ */
+  validatePassword(newPassword);
+};
 
 const buildUser = (user) => ({
   id: user._id.toString(),
@@ -143,16 +131,13 @@ const buildUser = (user) => ({
 
 const ensureActiveUser = (user) => {
   if (!user) {
-    throw new ApiError(
-      404,
-      "User account not found."
-    );
+    throw new ApiError(404, "User account not found.");
   }
 
   if (user.isDeleted) {
     throw new ApiError(
       403,
-      "Your account is no longer available."
+      "User account is no longer available."
     );
   }
 
@@ -163,7 +148,7 @@ const ensureActiveUser = (user) => {
     );
   }
 
-  if (user.status !== USER_STATUS.ACTIVE) {
+  if (user.status !== "active") {
     throw new ApiError(
       403,
       "Your account is not active."
@@ -171,73 +156,31 @@ const ensureActiveUser = (user) => {
   }
 };
 
-const ensureTeacherEligible = (user) => {
-  if (!user) {
-    throw new ApiError(
-      404,
-      "Teacher account not found."
-    );
-  }
-
-  if (user.role !== ROLES.TEACHER) {
-    throw new ApiError(
-      403,
-      "Invalid account type."
-    );
-  }
-
-  if (user.isDeleted) {
-    throw new ApiError(
-      403,
-      "Your account is no longer available."
-    );
-  }
-
-  if (!user.isActive) {
-    throw new ApiError(
-      403,
-      "Your account is inactive."
-    );
-  }
-
-  if (
-    user.status === USER_STATUS.SUSPENDED ||
-    user.status === USER_STATUS.LEAVE
-  ) {
-    throw new ApiError(
-      403,
-      "Your account is not eligible for verification."
-    );
-  }
-};
-
-const requiresFirstLogin = (user) =>
-  user.role === ROLES.TEACHER &&
-  (
-    !user.emailVerified ||
-    !user.firstLoginCompleted ||
-    user.status === USER_STATUS.PENDING_VERIFICATION
-  );
-
-const getLoginOtpPurpose = (user) =>
-  requiresFirstLogin(user)
-    ? OTP_PURPOSES.FIRST_LOGIN
-    : OTP_PURPOSES.LOGIN;
-
-/* ============================================================
-   REFRESH TOKEN HELPERS
-============================================================ */
-
 const hashToken = (token) =>
   crypto
     .createHash("sha256")
     .update(token)
     .digest("hex");
 
-const getRefreshExpiration = () =>
-  new Date(
-    Date.now() + ENV.REFRESH_COOKIE_MAX_AGE
-  );
+const createRefreshSession = async ({
+  user,
+  refreshToken,
+  ipAddress = "",
+  userAgent = "",
+}) => {
+  const tokenHash = hashToken(refreshToken);
+
+  await RefreshSession.create({
+    userId: user._id,
+    tokenHash,
+    ipAddress: ipAddress || null,
+    userAgent: userAgent || null,
+    isRevoked: false,
+    expiresAt: new Date(
+      Date.now() + ENV.REFRESH_COOKIE_MAX_AGE
+    ),
+  });
+};
 
 const revokeAllUserRefreshSessions = async (userId) => {
   await RefreshSession.updateMany(
@@ -274,20 +217,11 @@ export const loginService = async ({
     );
   }
 
-  /*
-   * Password is select:false in the schema,
-   * so explicitly request it only for login.
-   */
   const user = await User.findOne({
     email: normalizedEmail,
     isDeleted: false,
-  })
-    .select("+password")
-    .exec();
+  }).select("+password");
 
-  /*
-   * Do not reveal whether the email exists.
-   */
   if (!user || !user.password) {
     throw new ApiError(
       401,
@@ -307,10 +241,6 @@ export const loginService = async ({
     );
   }
 
-  /*
-   * Account must be checked only after
-   * credentials are validated.
-   */
   if (!user.isActive) {
     throw new ApiError(
       403,
@@ -318,40 +248,31 @@ export const loginService = async ({
     );
   }
 
-  if (
-    user.status === USER_STATUS.SUSPENDED
-  ) {
+  if (user.status === "suspended") {
     throw new ApiError(
       403,
       "Your account is suspended."
     );
   }
 
-  if (
-    user.status === USER_STATUS.LEAVE
-  ) {
+  if (user.status === "leave") {
     throw new ApiError(
       403,
       "Your account is currently on leave."
     );
   }
 
-  /*
-   * A pending teacher can continue through
-   * first-login verification.
-   */
-  if (
-    user.status !== USER_STATUS.ACTIVE &&
-    !requiresFirstLogin(user)
-  ) {
-    throw new ApiError(
-      403,
-      "Your account is not active."
+  const requiresFirstLogin =
+    user.role === ROLES.TEACHER &&
+    (
+      !user.emailVerified ||
+      !user.firstLoginCompleted ||
+      user.status === "pending_verification"
     );
-  }
 
-  const otpPurpose =
-    getLoginOtpPurpose(user);
+  const otpPurpose = requiresFirstLogin
+    ? OTP_PURPOSES.FIRST_LOGIN
+    : OTP_PURPOSES.LOGIN;
 
   try {
     await generateAndSendOtp(
@@ -359,13 +280,10 @@ export const loginService = async ({
       otpPurpose
     );
   } catch (error) {
-    /*
-     * Do not expose internal SMTP/provider
-     * information to the client.
-     */
     throw new ApiError(
-      error?.statusCode || 503,
-      "Unable to send the verification code. Please try again later."
+      error.statusCode || 500,
+      error.message ||
+        "Failed to send verification code."
     );
   }
 
@@ -390,17 +308,10 @@ export const verifyLoginOtpService = async ({
   ipAddress = "",
   userAgent = "",
 }) => {
-  const normalizedEmail =
-    normalizeEmail(email);
+  const normalizedEmail = normalizeEmail(email);
 
   let otpResult;
 
-  /*
-   * Try normal login OTP first.
-   *
-   * If this account is in first-login mode,
-   * accept FIRST_LOGIN OTP.
-   */
   try {
     otpResult = await verifyOtp(
       normalizedEmail,
@@ -422,30 +333,19 @@ export const verifyLoginOtpService = async ({
   const user = await User.findOne({
     _id: otpResult.userId,
     isDeleted: false,
-  }).exec();
+  });
 
-  ensureActiveUser(
-    user.status === USER_STATUS.PENDING_VERIFICATION
-      ? null
-      : user
-  );
-
-  /*
-   * For a teacher first login, OTP verification
-   * should normally go through the dedicated
-   * setup flow. Do not silently bypass password setup.
-   */
-  if (
-    user.role === ROLES.TEACHER &&
-    !user.firstLoginCompleted
-  ) {
-    throw new ApiError(
-      409,
-      "First-login account setup is required."
-    );
-  }
+  ensureActiveUser(user);
 
   user.emailVerified = true;
+  user.firstLoginCompleted = true;
+
+  if (
+    user.status === "pending_verification"
+  ) {
+    user.status = "active";
+  }
+
   user.lastLogin = new Date();
 
   await user.save();
@@ -456,15 +356,11 @@ export const verifyLoginOtpService = async ({
   const refreshToken =
     generateRefreshToken(user);
 
-  const tokenHash =
-    hashToken(refreshToken);
-
-  await RefreshSession.create({
-    userId: user._id,
-    tokenHash,
-    ipAddress: ipAddress || null,
-    userAgent: userAgent || null,
-    expiresAt: getRefreshExpiration(),
+  await createRefreshSession({
+    user,
+    refreshToken,
+    ipAddress,
+    userAgent,
   });
 
   return {
@@ -488,26 +384,32 @@ export const resendLoginOtpService = async ({
   const user = await User.findOne({
     email: normalizedEmail,
     isDeleted: false,
-  }).exec();
+  });
 
-  ensureActiveUser(
-    user?.status === USER_STATUS.PENDING_VERIFICATION
-      ? null
-      : user
-  );
+  ensureActiveUser(user);
 
-  const otpPurpose =
-    getLoginOtpPurpose(user);
+  const requiresFirstLogin =
+    user.role === ROLES.TEACHER &&
+    (
+      !user.emailVerified ||
+      !user.firstLoginCompleted ||
+      user.status === "pending_verification"
+    );
+
+  const otpPurpose = requiresFirstLogin
+    ? OTP_PURPOSES.FIRST_LOGIN
+    : OTP_PURPOSES.LOGIN;
 
   try {
     await generateAndSendOtp(
       user,
       otpPurpose
     );
-  } catch {
+  } catch (error) {
     throw new ApiError(
-      503,
-      "Unable to send the verification code. Please try again later."
+      error.statusCode || 500,
+      error.message ||
+        "Failed to resend verification code."
     );
   }
 
@@ -529,7 +431,7 @@ export const refreshAccessTokenService = async ({
 }) => {
   if (
     typeof refreshToken !== "string" ||
-    !refreshToken.trim()
+    !refreshToken
   ) {
     throw new ApiError(
       401,
@@ -541,9 +443,7 @@ export const refreshAccessTokenService = async ({
 
   try {
     decoded =
-      verifyRefreshToken(
-        refreshToken
-      );
+      verifyRefreshToken(refreshToken);
   } catch {
     throw new ApiError(
       401,
@@ -554,14 +454,10 @@ export const refreshAccessTokenService = async ({
   const tokenHash =
     hashToken(refreshToken);
 
-  /*
-   * tokenHash has a unique index, so this is
-   * an efficient O(1)-style indexed lookup.
-   */
   const session =
     await RefreshSession.findOne({
       tokenHash,
-    }).exec();
+    });
 
   if (!session) {
     throw new ApiError(
@@ -573,8 +469,8 @@ export const refreshAccessTokenService = async ({
   /*
    * Reuse detection.
    *
-   * A revoked refresh token being presented again
-   * indicates possible token theft.
+   * If a previously rotated token is used again,
+   * invalidate all sessions belonging to the user.
    */
   if (session.isRevoked) {
     await revokeAllUserRefreshSessions(
@@ -583,7 +479,7 @@ export const refreshAccessTokenService = async ({
 
     throw new ApiError(
       401,
-      "Refresh session is no longer valid."
+      "Refresh token has been revoked."
     );
   }
 
@@ -601,7 +497,7 @@ export const refreshAccessTokenService = async ({
           revokedAt: new Date(),
         },
       }
-    ).exec();
+    );
 
     throw new ApiError(
       401,
@@ -609,10 +505,6 @@ export const refreshAccessTokenService = async ({
     );
   }
 
-  /*
-   * Ensure the JWT and database session
-   * belong to the same user.
-   */
   if (
     decoded.sub !==
     session.userId.toString()
@@ -627,21 +519,19 @@ export const refreshAccessTokenService = async ({
     );
   }
 
-  const user =
-    await User.findOne({
-      _id: session.userId,
-      isDeleted: false,
-    }).exec();
+  const user = await User.findOne({
+    _id: session.userId,
+    isDeleted: false,
+  });
 
   ensureActiveUser(user);
 
   /*
-   * Atomic rotation.
+   * Atomically revoke the old session.
    *
-   * Two simultaneous requests using the same
-   * refresh token cannot both rotate it.
+   * Only one request can rotate this session.
    */
-  const rotatedSession =
+  const revokedSession =
     await RefreshSession.findOneAndUpdate(
       {
         _id: session._id,
@@ -656,9 +546,9 @@ export const refreshAccessTokenService = async ({
       {
         new: true,
       }
-    ).exec();
+    );
 
-  if (!rotatedSession) {
+  if (!revokedSession) {
     await revokeAllUserRefreshSessions(
       session.userId
     );
@@ -678,17 +568,23 @@ export const refreshAccessTokenService = async ({
   const newTokenHash =
     hashToken(newRefreshToken);
 
-  rotatedSession.replacedByTokenHash =
-    newTokenHash;
+  await RefreshSession.updateOne(
+    {
+      _id: revokedSession._id,
+    },
+    {
+      $set: {
+        replacedByTokenHash:
+          newTokenHash,
+      },
+    }
+  );
 
-  await rotatedSession.save();
-
-  await RefreshSession.create({
-    userId: user._id,
-    tokenHash: newTokenHash,
-    ipAddress: ipAddress || null,
-    userAgent: userAgent || null,
-    expiresAt: getRefreshExpiration(),
+  await createRefreshSession({
+    user,
+    refreshToken: newRefreshToken,
+    ipAddress,
+    userAgent,
   });
 
   return {
@@ -721,14 +617,8 @@ export const logoutService = async ({
           revokedAt: new Date(),
         },
       }
-    ).exec();
-
-    return {
-      success: true,
-    };
-  }
-
-  if (userId) {
+    );
+  } else if (userId) {
     const validUserId =
       validateUserId(userId);
 
@@ -751,16 +641,11 @@ export const requestVerificationOtpService =
     const normalizedEmail =
       normalizeEmail(email);
 
-    const user =
-      await User.findOne({
-        email: normalizedEmail,
-        isDeleted: false,
-      }).exec();
+    const user = await User.findOne({
+      email: normalizedEmail,
+      isDeleted: false,
+    });
 
-    /*
-     * This endpoint is specifically for teachers,
-     * so the error can be explicit here.
-     */
     if (!user) {
       throw new ApiError(
         404,
@@ -768,12 +653,36 @@ export const requestVerificationOtpService =
       );
     }
 
-    ensureTeacherEligible(user);
+    if (
+      user.role !== ROLES.TEACHER
+    ) {
+      throw new ApiError(
+        400,
+        "First-login verification is only available for teacher accounts."
+      );
+    }
+
+    if (!user.isActive) {
+      throw new ApiError(
+        403,
+        "Your account is inactive."
+      );
+    }
+
+    if (
+      user.status === "suspended" ||
+      user.status === "leave"
+    ) {
+      throw new ApiError(
+        403,
+        "Your account is not eligible for verification."
+      );
+    }
 
     if (
       user.emailVerified &&
       user.firstLoginCompleted &&
-      user.status === USER_STATUS.ACTIVE
+      user.status === "active"
     ) {
       throw new ApiError(
         400,
@@ -781,23 +690,10 @@ export const requestVerificationOtpService =
       );
     }
 
-    try {
-      await generateAndSendOtp(
-        user,
-        OTP_PURPOSES.FIRST_LOGIN
-      );
-    } catch {
-      throw new ApiError(
-        503,
-        "Unable to send the verification code. Please try again later."
-      );
-    }
-
-    return {
-      success: true,
-      message:
-        "Verification code sent to your registered email.",
-    };
+    return generateAndSendOtp(
+      user,
+      OTP_PURPOSES.FIRST_LOGIN
+    );
   };
 
 /* ============================================================
@@ -820,20 +716,53 @@ export const verifyTeacherOtpService =
       await User.findOne({
         _id: result.userId,
         isDeleted: false,
-      }).exec();
+      });
 
-    ensureTeacherEligible(user);
-
-    if (user.firstLoginCompleted) {
+    if (!user) {
       throw new ApiError(
-        409,
-        "First-login setup has already been completed."
+        404,
+        "User account not found."
+      );
+    }
+
+    if (
+      user.role !== ROLES.TEACHER
+    ) {
+      throw new ApiError(
+        403,
+        "Invalid account type."
+      );
+    }
+
+    if (!user.isActive) {
+      throw new ApiError(
+        403,
+        "Your account is inactive."
+      );
+    }
+
+    if (
+      user.status === "suspended" ||
+      user.status === "leave"
+    ) {
+      throw new ApiError(
+        403,
+        "Your account is not eligible for verification."
       );
     }
 
     user.emailVerified = true;
-    user.status =
-      USER_STATUS.PENDING_VERIFICATION;
+
+    /*
+     * Do NOT activate the account yet.
+     *
+     * The teacher still needs to create
+     * their permanent password.
+     */
+    if (!user.firstLoginCompleted) {
+      user.status =
+        "pending_verification";
+    }
 
     await user.save();
 
@@ -856,7 +785,9 @@ export const completeFirstLoginService =
   async (
     setupToken,
     newPassword,
-    confirmPassword
+    confirmPassword,
+    ipAddress = "",
+    userAgent = ""
   ) => {
     if (
       typeof setupToken !== "string" ||
@@ -891,9 +822,7 @@ export const completeFirstLoginService =
       await User.findOne({
         _id: decoded.sub,
         isDeleted: false,
-      })
-        .select("+password")
-        .exec();
+      }).select("+password");
 
     if (!user) {
       throw new ApiError(
@@ -902,7 +831,9 @@ export const completeFirstLoginService =
       );
     }
 
-    if (user.role !== ROLES.TEACHER) {
+    if (
+      user.role !== ROLES.TEACHER
+    ) {
       throw new ApiError(
         403,
         "Invalid account type."
@@ -945,43 +876,39 @@ export const completeFirstLoginService =
       }
     }
 
-    /*
-     * User model pre-save hook hashes this password.
-     */
-    user.password = newPassword;
-    user.emailVerified = true;
-    user.firstLoginCompleted = true;
-    user.status = USER_STATUS.ACTIVE;
-    user.isActive = true;
-    user.lastLogin = new Date();
+    user.password =
+      newPassword;
+
+    user.emailVerified =
+      true;
+
+    user.firstLoginCompleted =
+      true;
+
+    user.status =
+      "active";
+
+    user.isActive =
+      true;
+
+    user.lastLogin =
+      new Date();
 
     await user.save();
 
     /*
-     * A setup flow must invalidate all previously
-     * issued refresh sessions.
+     * Invalidate any old sessions.
      */
     await revokeAllUserRefreshSessions(
       user._id
     );
 
     /*
-     * Email notification is best-effort.
-     * Account setup should not fail because SMTP is down.
-     */
-    try {
-      await sendPasswordChangedNotificationEmail({
-        to: user.email,
-        name: user.name,
-      });
-    } catch {
-      // Intentionally ignored.
-    }
-
-    /*
-     * IMPORTANT:
-     * Return both access and refresh tokens if the
-     * controller expects automatic login after setup.
+     * Create a proper authenticated session.
+     *
+     * Previously this function generated only
+     * an access token. That was inconsistent with
+     * the normal login flow.
      */
     const accessToken =
       generateAccessToken(user);
@@ -989,14 +916,24 @@ export const completeFirstLoginService =
     const refreshToken =
       generateRefreshToken(user);
 
-    const tokenHash =
-      hashToken(refreshToken);
-
-    await RefreshSession.create({
-      userId: user._id,
-      tokenHash,
-      expiresAt: getRefreshExpiration(),
+    await createRefreshSession({
+      user,
+      refreshToken,
+      ipAddress,
+      userAgent,
     });
+
+    /*
+     * Notification email is non-critical.
+     */
+    try {
+      await sendPasswordChangedNotificationEmail({
+        to: user.email,
+        name: user.name,
+      });
+    } catch {
+      // Do not fail account setup.
+    }
 
     return {
       message:
@@ -1022,8 +959,7 @@ export const changePasswordService =
       validateUserId(userId);
 
     if (
-      typeof currentPassword !== "string" ||
-      !currentPassword
+      typeof currentPassword !== "string"
     ) {
       throw new ApiError(
         400,
@@ -1037,7 +973,8 @@ export const changePasswordService =
     );
 
     if (
-      currentPassword === newPassword
+      currentPassword ===
+      newPassword
     ) {
       throw new ApiError(
         400,
@@ -1049,9 +986,7 @@ export const changePasswordService =
       await User.findOne({
         _id: validUserId,
         isDeleted: false,
-      })
-        .select("+password")
-        .exec();
+      }).select("+password");
 
     ensureActiveUser(user);
 
@@ -1080,9 +1015,6 @@ export const changePasswordService =
 
     await user.save();
 
-    /*
-     * Password change invalidates every refresh session.
-     */
     await revokeAllUserRefreshSessions(
       user._id
     );
@@ -1093,7 +1025,7 @@ export const changePasswordService =
         name: user.name,
       });
     } catch {
-      // Notification failure must not fail password change.
+      // Do not fail password change.
     }
 
     return {
@@ -1127,29 +1059,20 @@ export const requestForgotPasswordOtpService =
       await User.findOne({
         email: normalizedEmail,
         isDeleted: false,
-      }).exec();
+      });
 
-    /*
-     * Never reveal whether an account exists.
-     */
     if (
       !user ||
       !user.isActive ||
-      user.status !== USER_STATUS.ACTIVE
+      user.status !== "active"
     ) {
       return genericResponse;
     }
 
-    try {
-      await generateAndSendOtp(
-        user,
-        OTP_PURPOSES.PASSWORD_RESET
-      );
-    } catch {
-      /*
-       * Still return the generic response.
-       */
-    }
+    await generateAndSendOtp(
+      user,
+      OTP_PURPOSES.PASSWORD_RESET
+    );
 
     return genericResponse;
   };
@@ -1174,7 +1097,7 @@ export const verifyForgotPasswordOtpService =
       await User.findOne({
         _id: result.userId,
         isDeleted: false,
-      }).exec();
+      });
 
     ensureActiveUser(user);
 
@@ -1231,16 +1154,10 @@ export const resetPasswordService =
       await User.findOne({
         _id: decoded.sub,
         isDeleted: false,
-      })
-        .select("+password")
-        .exec();
+      }).select("+password");
 
     ensureActiveUser(user);
 
-    /*
-     * Reset token becomes invalid after passwordChangedAt
-     * moves past the token's issued-at time.
-     */
     if (
       user.passwordChangedAt &&
       decoded.iat &&
@@ -1273,9 +1190,6 @@ export const resetPasswordService =
 
     await user.save();
 
-    /*
-     * Kill every existing authenticated session.
-     */
     await revokeAllUserRefreshSessions(
       user._id
     );
@@ -1286,12 +1200,12 @@ export const resetPasswordService =
         name: user.name,
       });
     } catch {
-      // Notification failure must not fail password reset.
+      // Do not fail password reset.
     }
 
     return {
       message:
-        "Password reset successfully. Please log in with your new password.",
+        "Password reset successfully. Please login with your new password.",
     };
   };
 
@@ -1308,12 +1222,7 @@ export const getMeService =
       await User.findOne({
         _id: validUserId,
         isDeleted: false,
-      })
-        .select(
-          "name email role status isActive emailVerified firstLoginCompleted avatar profile lastLogin createdAt updatedAt"
-        )
-        .lean()
-        .exec();
+      });
 
     ensureActiveUser(user);
 
@@ -1329,23 +1238,11 @@ export const validateUserFromToken =
     const validUserId =
       validateUserId(userId);
 
-    /*
-     * Authentication middleware only needs a small
-     * projection, not the complete User document.
-     *
-     * This reduces MongoDB payload and object creation
-     * on every protected request.
-     */
     const user =
       await User.findOne({
         _id: validUserId,
         isDeleted: false,
-      })
-        .select(
-          "name email role status isActive emailVerified firstLoginCompleted avatar profile lastLogin createdAt updatedAt"
-        )
-        .lean()
-        .exec();
+      });
 
     if (!user) {
       throw new ApiError(
@@ -1361,7 +1258,7 @@ export const validateUserFromToken =
       );
     }
 
-    if (user.status !== USER_STATUS.ACTIVE) {
+    if (user.status !== "active") {
       throw new ApiError(
         403,
         "Account is not active."
@@ -1398,13 +1295,9 @@ export const updateProfileService =
       await User.findOne({
         _id: validUserId,
         isDeleted: false,
-      }).exec();
+      });
 
     ensureActiveUser(user);
-
-    /* --------------------------------------------------------
-       NAME
-    -------------------------------------------------------- */
 
     if (data.name !== undefined) {
       if (
@@ -1436,10 +1329,6 @@ export const updateProfileService =
       user.name = name;
     }
 
-    /* --------------------------------------------------------
-       AVATAR
-    -------------------------------------------------------- */
-
     if (data.avatar !== undefined) {
       if (
         data.avatar !== null &&
@@ -1457,10 +1346,6 @@ export const updateProfileService =
           ? data.avatar.trim()
           : null;
     }
-
-    /* --------------------------------------------------------
-       PROFILE
-    -------------------------------------------------------- */
 
     if (data.profile !== undefined) {
       if (
@@ -1532,15 +1417,10 @@ export const updateProfileService =
             );
           }
 
-          user.profile.dob =
-            dob;
+          user.profile.dob = dob;
         }
       }
     }
-
-    /* --------------------------------------------------------
-       EMAIL
-    -------------------------------------------------------- */
 
     if (data.email !== undefined) {
       const newEmail =
