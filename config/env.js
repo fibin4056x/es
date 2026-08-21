@@ -106,8 +106,6 @@ const MONGO_URI = getEnv(
 // JWT SECRETS
 // ============================================================
 //
-// Separate secrets are intentionally used for each token type.
-//
 // ACCESS  → short-lived API authentication
 // REFRESH → long-lived session renewal
 // SETUP   → teacher first-login setup
@@ -264,47 +262,14 @@ if (IS_PRODUCTION) {
 }
 
 // ============================================================
-// EMAIL / SMTP
+// EMAIL / RESEND
 // ============================================================
 
-const EMAIL_HOST =
-  getEnv("EMAIL_HOST");
-
-const EMAIL_PORT =
-  getNumberEnv(
-    "EMAIL_PORT",
-    587
-  );
-
-const EMAIL_USER =
-  getEnv("EMAIL_USER");
-
-const EMAIL_PASS =
-  getOptionalEnv("EMAIL_PASS") ||
-  getOptionalEnv(
-    "EMAIL_PASSWORD"
-  );
-
-if (!EMAIL_PASS) {
-  throw new Error(
-    "EMAIL_PASS or EMAIL_PASSWORD is required."
-  );
-}
+const RESEND_API_KEY =
+  getEnv("RESEND_API_KEY");
 
 const EMAIL_FROM =
-  getOptionalEnv(
-    "EMAIL_FROM",
-    EMAIL_USER
-  );
-
-if (
-  EMAIL_PORT < 1 ||
-  EMAIL_PORT > 65535
-) {
-  throw new Error(
-    "EMAIL_PORT must be between 1 and 65535."
-  );
-}
+  getEnv("EMAIL_FROM");
 
 // ============================================================
 // OTP SECURITY
@@ -529,13 +494,10 @@ export const ENV = Object.freeze({
   CLIENT_ORIGIN,
 
   // ----------------------------------------------------------
-  // EMAIL
+  // EMAIL / RESEND
   // ----------------------------------------------------------
 
-  EMAIL_HOST,
-  EMAIL_PORT,
-  EMAIL_USER,
-  EMAIL_PASS,
+  RESEND_API_KEY,
   EMAIL_FROM,
 
   // ----------------------------------------------------------

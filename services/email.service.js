@@ -1,55 +1,49 @@
+import { Resend } from "resend";
 import { ENV } from "../config/env.js";
-import nodemailer from "nodemailer";
 
-let transporter = null;
+let resendClient = null;
 
 /* =========================================================
-   CREATE / GET SMTP TRANSPORTER
+   CREATE / GET RESEND CLIENT
 ========================================================= */
 
-const getTransporter = () => {
-  if (transporter) {
-    return transporter;
+const getResendClient = () => {
+  if (resendClient) {
+    return resendClient;
   }
 
-  if (!ENV.EMAIL_HOST || !ENV.EMAIL_USER || !ENV.EMAIL_PASS) {
+  if (!ENV.RESEND_API_KEY) {
     throw new Error(
-      "Email configuration is missing. Check EMAIL_HOST, EMAIL_USER and EMAIL_PASS."
+      "Email configuration is missing. Check RESEND_API_KEY."
     );
   }
 
-  transporter = nodemailer.createTransport({
-    host: ENV.EMAIL_HOST,
-    port: Number(ENV.EMAIL_PORT) || 587,
-    secure: Number(ENV.EMAIL_PORT) === 465,
-    auth: {
-      user: ENV.EMAIL_USER,
-      pass: ENV.EMAIL_PASS,
-    },
-    connectionTimeout: 5000,
-    greetingTimeout: 5000,
-    socketTimeout: 5000,
-  });
+  resendClient = new Resend(ENV.RESEND_API_KEY);
 
-  return transporter;
+  return resendClient;
 };
 
 /* =========================================================
-   VERIFY SMTP CONNECTION
+   VERIFY EMAIL CONNECTION
 ========================================================= */
+
+/*
+  Resend uses an HTTPS API instead of SMTP.
+
+  There is no SMTP transporter.verify() equivalent needed here.
+  We simply verify that the API key exists and initialize the client.
+*/
 
 export const verifyEmailConnection = async () => {
   try {
-    const mailTransporter = getTransporter();
+    getResendClient();
 
-    await mailTransporter.verify();
-
-    console.log("✅ Gmail SMTP connection verified");
+    console.log("✅ Resend email client initialized");
 
     return true;
   } catch (error) {
     console.error(
-      "⚠️ Gmail SMTP verification warning:",
+      "⚠️ Resend email configuration warning:",
       error.message
     );
 
@@ -75,26 +69,35 @@ export const sendEmail = async ({
     throw new Error("Email subject is required.");
   }
 
-  const mailTransporter = getTransporter();
+  const resend = getResendClient();
 
   try {
-    const info = await mailTransporter.sendMail({
-      from: ENV.EMAIL_FROM || ENV.EMAIL_USER,
+    const { data, error } = await resend.emails.send({
+      from: ENV.EMAIL_FROM,
       to,
       subject,
       text,
       html,
     });
 
+    if (error) {
+      console.error("❌ Resend email failed");
+      console.error("Recipient:", to);
+      console.error("Subject:", subject);
+      console.error("Error:", error.message);
+
+      throw new Error(`Email sending failed: ${error.message}`);
+    }
+
     console.log(`✅ Email sent successfully to ${to}`);
-    console.log(`📨 Message ID: ${info.messageId}`);
+    console.log(`📨 Message ID: ${data.id}`);
 
     return {
       success: true,
-      messageId: info.messageId,
+      messageId: data.id,
     };
   } catch (error) {
-    console.error("❌ SMTP email failed");
+    console.error("❌ Email sending failed");
     console.error("Recipient:", to);
     console.error("Subject:", subject);
     console.error("Error:", error.message);
@@ -117,10 +120,6 @@ export const sendLoginOtpEmail = async ({
   if (!otp) {
     throw new Error("OTP is required.");
   }
-
-  // IMPORTANT:
-  // Never log OTPs, passwords, tokens,
-  // or other authentication secrets.
 
   const subject = "SLMS - Login Verification Code";
 
@@ -301,18 +300,11 @@ SLMS Administration
       padding: 30px;
     "
   >
-    <h2
-      style="
-        color: #4f46e5;
-        margin-bottom: 8px;
-      "
-    >
+    <h2 style="color: #4f46e5;">
       School Learning Management System
     </h2>
 
-    <h3>
-      First-Time Teacher Verification
-    </h3>
+    <h3>First-Time Teacher Verification</h3>
 
     <p>
       Hello <strong>${name}</strong>,
@@ -449,9 +441,7 @@ SLMS Administration
       SLMS Security
     </h2>
 
-    <h3>
-      Password Reset Verification
-    </h3>
+    <h3>Password Reset Verification</h3>
 
     <p>
       Hello <strong>${name}</strong>,
