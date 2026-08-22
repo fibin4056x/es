@@ -1,26 +1,28 @@
-import { Resend } from "resend";
+import { BrevoClient } from "@getbrevo/brevo";
 import { ENV } from "../config/env.js";
 
-let resendClient = null;
+let brevoClient = null;
 
 /* =========================================================
-   CREATE / GET RESEND CLIENT
+   CREATE / GET BREVO CLIENT
 ========================================================= */
 
-const getResendClient = () => {
-  if (resendClient) {
-    return resendClient;
+const getBrevoClient = () => {
+  if (brevoClient) {
+    return brevoClient;
   }
 
-  if (!ENV.RESEND_API_KEY) {
+  if (!ENV.BREVO_API_KEY) {
     throw new Error(
-      "Email configuration is missing. Check RESEND_API_KEY."
+      "Email configuration is missing. Check BREVO_API_KEY."
     );
   }
 
-  resendClient = new Resend(ENV.RESEND_API_KEY);
+  brevoClient = new BrevoClient({
+    apiKey: ENV.BREVO_API_KEY,
+  });
 
-  return resendClient;
+  return brevoClient;
 };
 
 /* =========================================================
@@ -28,23 +30,24 @@ const getResendClient = () => {
 ========================================================= */
 
 /*
-  Resend uses an HTTPS API instead of SMTP.
+  Brevo uses an HTTPS API.
+  There is no SMTP transporter.verify() required.
 
-  There is no SMTP transporter.verify() equivalent needed here.
-  We simply verify that the API key exists and initialize the client.
+  We only initialize the Brevo client here.
+  The actual API key is verified when an email is sent.
 */
 
 export const verifyEmailConnection = async () => {
   try {
-    getResendClient();
+    getBrevoClient();
 
-    console.log("✅ Resend email client initialized");
+    console.log("✅ Brevo email client initialized");
 
     return true;
   } catch (error) {
     console.error(
-      "⚠️ Resend email configuration warning:",
-      error.message
+      "⚠️ Brevo email configuration warning:",
+      error?.message || error
     );
 
     return false;
@@ -62,48 +65,67 @@ export const sendEmail = async ({
   text,
 }) => {
   if (!to) {
-    throw new Error("Recipient email address is required.");
+    throw new Error(
+      "Recipient email address is required."
+    );
   }
 
   if (!subject) {
-    throw new Error("Email subject is required.");
+    throw new Error(
+      "Email subject is required."
+    );
   }
 
-  const resend = getResendClient();
+  const brevo = getBrevoClient();
 
   try {
-    const { data, error } = await resend.emails.send({
-      from: ENV.EMAIL_FROM,
-      to,
-      subject,
-      text,
-      html,
-    });
+    const response =
+      await brevo.transactionalEmails.sendTransacEmail({
+        sender: {
+          name: ENV.EMAIL_FROM_NAME || "SLMS",
+          email: ENV.EMAIL_FROM,
+        },
 
-    if (error) {
-      console.error("❌ Resend email failed");
-      console.error("Recipient:", to);
-      console.error("Subject:", subject);
-      console.error("Error:", error.message);
+        to: [
+          {
+            email: to,
+          },
+        ],
 
-      throw new Error(`Email sending failed: ${error.message}`);
-    }
+        subject,
 
-    console.log(`✅ Email sent successfully to ${to}`);
-    console.log(`📨 Message ID: ${data.id}`);
+        htmlContent: html,
+
+        textContent: text,
+      });
+
+    console.log(
+      `✅ Email sent successfully to ${to}`
+    );
+
+    console.log(
+      `📨 Message ID: ${response?.messageId || "N/A"}`
+    );
 
     return {
       success: true,
-      messageId: data.id,
+      messageId: response?.messageId || null,
     };
   } catch (error) {
-    console.error("❌ Email sending failed");
+    console.error("❌ Brevo email failed");
+
     console.error("Recipient:", to);
     console.error("Subject:", subject);
-    console.error("Error:", error.message);
+
+    console.error(
+      "Error:",
+      error?.message || error
+    );
 
     throw new Error(
-      `Email sending failed: ${error.message}`
+      `Email sending failed: ${
+        error?.message || "Unknown Brevo error"
+      }`
     );
   }
 };
@@ -121,7 +143,8 @@ export const sendLoginOtpEmail = async ({
     throw new Error("OTP is required.");
   }
 
-  const subject = "SLMS - Login Verification Code";
+  const subject =
+    "SLMS - Login Verification Code";
 
   const text = `
 Hello ${name || "User"},
@@ -423,7 +446,7 @@ SLMS Administration
   style="
     margin: 0;
     padding: 0;
-    background-color: #f5f7fb;
+    background: #f5f7fb;
     font-family: Arial, Helvetica, sans-serif;
   "
 >

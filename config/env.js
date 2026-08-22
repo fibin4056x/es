@@ -262,14 +262,20 @@ if (IS_PRODUCTION) {
 }
 
 // ============================================================
-// EMAIL / RESEND
+// EMAIL / BREVO
 // ============================================================
 
-const RESEND_API_KEY =
-  getEnv("RESEND_API_KEY");
+const BREVO_API_KEY =
+  getEnv("BREVO_API_KEY");
 
 const EMAIL_FROM =
   getEnv("EMAIL_FROM");
+
+const EMAIL_FROM_NAME =
+  getOptionalEnv(
+    "EMAIL_FROM_NAME",
+    "SLMS"
+  );
 
 // ============================================================
 // OTP SECURITY
@@ -498,12 +504,13 @@ export const ENV = Object.freeze({
 
   CLIENT_ORIGIN,
 
-  // ----------------------------------------------------------
-  // EMAIL / RESEND
-  // ----------------------------------------------------------
+ // ----------------------------------------------------------
+// EMAIL / BREVO
+// ----------------------------------------------------------
 
-  RESEND_API_KEY,
-  EMAIL_FROM,
+BREVO_API_KEY,
+EMAIL_FROM,
+EMAIL_FROM_NAME,
 
   // ----------------------------------------------------------
   // OTP
