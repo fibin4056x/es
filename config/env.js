@@ -336,10 +336,15 @@ const COOKIE_DOMAIN =
     "COOKIE_DOMAIN"
   );
 
+const IS_CROSS_ORIGIN_HTTPS =
+  IS_PRODUCTION ||
+  (typeof CLIENT_ORIGIN === "string" && CLIENT_ORIGIN.startsWith("https://")) ||
+  Boolean(process.env.RENDER || process.env.VERCEL);
+
 const COOKIE_SAME_SITE =
   getOptionalEnv(
     "COOKIE_SAME_SITE",
-    IS_PRODUCTION
+    IS_CROSS_ORIGIN_HTTPS
       ? "none"
       : "lax"
   ).toLowerCase();
@@ -362,7 +367,7 @@ if (
 }
 
 if (
-  IS_PRODUCTION &&
+  IS_CROSS_ORIGIN_HTTPS &&
   COOKIE_SAME_SITE === "none" &&
   !CLIENT_ORIGIN.startsWith(
     "https://"
@@ -380,7 +385,7 @@ if (
 const COOKIE_SECURE =
   getOptionalEnv(
     "COOKIE_SECURE",
-    IS_PRODUCTION
+    IS_CROSS_ORIGIN_HTTPS
       ? "true"
       : "false"
   ) === "true";
@@ -392,7 +397,7 @@ const COOKIE_HTTP_ONLY =
   ) === "true";
 
 if (
-  IS_PRODUCTION &&
+  IS_CROSS_ORIGIN_HTTPS &&
   !COOKIE_SECURE
 ) {
   throw new Error(
@@ -423,7 +428,7 @@ const ACCESS_COOKIE_MAX_AGE =
 const TRUST_PROXY =
   getOptionalEnv(
     "TRUST_PROXY",
-    IS_PRODUCTION
+    IS_CROSS_ORIGIN_HTTPS
       ? "true"
       : "false"
   ) === "true";

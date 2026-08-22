@@ -754,6 +754,9 @@ export const dashboardStatsService =
     ]);
 
     return {
+      students: totalStudents,
+      teachers: totalTeachers,
+
       studentStats: {
         active: activeStudents,
         inactive: inactiveStudents,

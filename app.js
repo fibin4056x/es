@@ -47,7 +47,7 @@ const rawOrigins = [
 
 const allowedOrigins = rawOrigins
   .flatMap((origin) => String(origin).split(","))
-  .map((origin) => origin.trim().replace(/\/+$/, ""))
+  .map((origin) => origin.trim().replace(/\/+$/, "").toLowerCase())
   .filter(Boolean);
 
 app.use(
@@ -58,7 +58,7 @@ app.use(
         return callback(null, true);
       }
 
-      const normalizedOrigin = origin.replace(/\/+$/, "");
+      const normalizedOrigin = origin.replace(/\/+$/, "").toLowerCase();
       if (allowedOrigins.includes(normalizedOrigin)) {
         return callback(null, true);
       }
@@ -83,6 +83,7 @@ app.use(
       "Content-Type",
       "Authorization",
       "X-Requested-With",
+      "Accept",
     ],
   })
 );
